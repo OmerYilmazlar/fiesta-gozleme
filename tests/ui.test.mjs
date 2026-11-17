@@ -31,7 +31,7 @@ test('news is immediately above story and preserves original sections, links and
   assert.equal(document.querySelector('#instagram').nextElementSibling.id, 'story');
   assert.equal(document.querySelector('.instagram-follow a').getAttribute('href'), 'https://www.instagram.com/fiestagozleme/');
   for (const id of ['menu', 'story', 'markets', 'gallery', 'contact', 'navigation']) assert.ok(document.getElementById(id));
-  assert.equal(document.querySelectorAll('.market-card').length, 9);
+  assert.equal(document.querySelectorAll('.market-card').length, 10);
   assert.ok(document.querySelector('a[href="mailto:fiestagozleme@gmail.com"]'));
   assert.ok(document.querySelector('a[href="tel:+447548298372"]'));
   assert.ok(!html.includes('/_sites/'));
@@ -137,7 +137,7 @@ test('existing mobile menu, Escape, market and filling filters still work', asyn
   document.querySelector('[data-day="Monday"]').click();
   assert.equal([...document.querySelectorAll('.market-card')].filter(card => !card.hidden).length, 1);
   document.querySelector('[data-day="All week"]').click();
-  assert.equal([...document.querySelectorAll('.market-card')].filter(card => !card.hidden).length, 9);
+  assert.equal([...document.querySelectorAll('.market-card')].filter(card => !card.hidden).length, 10);
   document.querySelector('[data-filling="meat"]').click();
   assert.equal([...document.querySelectorAll('[data-kind]')].filter(item => !item.hidden).length, 2);
 });
