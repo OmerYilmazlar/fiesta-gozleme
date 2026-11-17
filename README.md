@@ -1,4 +1,4 @@
-﻿# Fiesta Gozleme
+# Fiesta Gozleme
 
 Live site: https://omeryilmazlar.github.io/fiesta-gozleme/
 Repository: https://github.com/OmerYilmazlar/fiesta-gozleme
@@ -23,7 +23,8 @@ Start-ScheduledTask -TaskName 'Fiesta Gozleme - Instagram refresh'
 # Inspect Windows status and next scheduled start:
 Get-ScheduledTaskInfo -TaskName 'Fiesta Gozleme - Instagram refresh'
 # Force an extra manual refresh today, only when the task is not running:
-.\scriptsun-instagram-task.ps1 -ForceRun
+.\scripts
+un-instagram-task.ps1 -ForceRun
 # Pause automatic updates:
 Disable-ScheduledTask -TaskName 'Fiesta Gozleme - Instagram refresh'
 # Resume:

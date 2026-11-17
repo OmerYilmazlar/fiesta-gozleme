@@ -9,10 +9,10 @@ $config = Get-Content -Raw -LiteralPath (Join-Path $taskState 'task-config.json'
 $env:FIESTA_GIT = $config.git
 $arguments = @((Join-Path $PSScriptRoot 'local-instagram-task.mjs'))
 if ($ForceRun) { $arguments += '--force' }
-Add-Content -LiteralPath $logFile -Value ("`n--- " + (Get-Date -Format o) + ' ---')
+Add-Content -LiteralPath $logFile -Encoding UTF8 -Value ("`n--- " + (Get-Date -Format o) + ' ---')
 # PowerShell 5 treats native stderr as an error record, even for harmless Node warnings.
 $ErrorActionPreference = 'Continue'
-& $config.node @arguments >> $logFile 2>&1
+& $config.node @arguments 2>&1 | Out-File -LiteralPath $logFile -Append -Encoding UTF8
 $result = $LASTEXITCODE
-Add-Content -LiteralPath $logFile -Value ("Exit code: " + $result)
+Add-Content -LiteralPath $logFile -Encoding UTF8 -Value ("Exit code: " + $result)
 exit $result
