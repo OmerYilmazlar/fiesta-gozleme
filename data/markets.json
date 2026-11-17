@@ -1,0 +1,282 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "name": "Clifton Food Market",
+    "address": "Clifton Food Market",
+    "postcode": "EC2A 4EY",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 0,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Monday",
+        "start": "10:30",
+        "end": "14:30"
+      },
+      {
+        "day": "Tuesday",
+        "start": "10:30",
+        "end": "14:30"
+      },
+      {
+        "day": "Wednesday",
+        "start": "10:30",
+        "end": "14:30"
+      },
+      {
+        "day": "Thursday",
+        "start": "10:30",
+        "end": "14:30"
+      },
+      {
+        "day": "Friday",
+        "start": "10:30",
+        "end": "14:30"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "name": "Oxford Gloucester Green Outdoor Market",
+    "address": "Oxford Gloucester Green Outdoor Market",
+    "postcode": "OX1 2BU",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 1,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "day": "Thursday",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "day": "Friday",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "day": "Saturday",
+        "start": "10:00",
+        "end": "17:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "name": "Southbank Centre Food Market",
+    "address": "Southbank Centre Food Market",
+    "postcode": "SE1 8XX",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 2,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Friday",
+        "start": "12:00",
+        "end": "21:00"
+      },
+      {
+        "day": "Saturday",
+        "start": "11:00",
+        "end": "21:00"
+      },
+      {
+        "day": "Sunday",
+        "start": "12:00",
+        "end": "18:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000004",
+    "name": "Canada Water Market",
+    "address": "Canada Water Market",
+    "postcode": "SE16 7AR",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 3,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Saturday",
+        "start": "11:00",
+        "end": "18:00"
+      },
+      {
+        "day": "Sunday",
+        "start": "11:00",
+        "end": "18:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000005",
+    "name": "Wapping Docklands Market",
+    "address": "Wapping Docklands Market",
+    "postcode": "E1W 3TD",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 4,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Saturday",
+        "start": "10:00",
+        "end": "16:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000006",
+    "name": "Duck Pond Market Richmond",
+    "address": "Duck Pond Market Richmond",
+    "postcode": "TW9 1EP",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 5,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start": "10:00",
+        "end": "16:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000007",
+    "name": "Alexandra Palace Farmers Market",
+    "address": "Alexandra Palace Farmers Market",
+    "postcode": "N10 3TG",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 6,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start": "10:00",
+        "end": "15:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000008",
+    "name": "Beckenham Place Park Farmers Market",
+    "address": "Beckenham Place Park Farmers Market",
+    "postcode": "BR3 1SY",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 7,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start": "10:00",
+        "end": "15:00"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000009",
+    "name": "KERB Fleet Place",
+    "address": "1 Fleet Place, London",
+    "postcode": "EC4M 7RD",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 8,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "date": "2026-11-26",
+        "start": "11:30",
+        "end": "14:30"
+      },
+      {
+        "date": "2026-12-01",
+        "start": "11:30",
+        "end": "14:30"
+      },
+      {
+        "date": "2026-12-03",
+        "start": "11:30",
+        "end": "14:30"
+      },
+      {
+        "date": "2026-12-09",
+        "start": "11:30",
+        "end": "14:30"
+      },
+      {
+        "date": "2026-12-10",
+        "start": "11:30",
+        "end": "14:30"
+      },
+      {
+        "date": "2026-12-16",
+        "start": "11:30",
+        "end": "14:30"
+      },
+      {
+        "date": "2026-12-17",
+        "start": "11:30",
+        "end": "14:30"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000010",
+    "name": "KERB New Acres",
+    "address": "Odyssey Way, Wandsworth, London",
+    "postcode": "SW18 1FP",
+    "description": "",
+    "color": "#fff2db",
+    "sort_order": 9,
+    "published": true,
+    "expires_at": null,
+    "schedule": [
+      {
+        "date": "2026-11-22",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "date": "2026-11-29",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "date": "2026-12-06",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "date": "2026-12-13",
+        "start": "10:00",
+        "end": "16:00"
+      },
+      {
+        "date": "2026-12-20",
+        "start": "10:00",
+        "end": "16:00"
+      }
+    ]
+  }
+]

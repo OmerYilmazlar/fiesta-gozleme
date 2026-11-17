@@ -10,9 +10,10 @@ export async function build(root = process.cwd()) {
   // Only this known generated directory is removed.
   await rm(out, { recursive: true, force: true });
   await mkdir(out, { recursive: true });
-  for (const file of ['index.html', 'style.css', 'script.js', 'instagram-feed.js']) await cp(join(root, file), join(out, file));
+  for (const file of ['index.html', 'style.css', 'script.js', 'instagram-feed.js', 'markets.js', 'market-data.js', 'supabase-config.js', 'admin.html', 'admin.css', 'admin.js']) await cp(join(root, file), join(out, file));
   await cp(join(root, 'assets'), join(out, 'assets'), { recursive: true });
   await mkdir(join(out, 'data'));
+  await cp(join(root, 'data/markets.json'), join(out, 'data/markets.json'));
   let raw;
   try { raw = await readFile(join(root, 'data/instagram.json'), 'utf8'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }

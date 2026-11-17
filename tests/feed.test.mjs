@@ -137,8 +137,10 @@ test('failed fetch and second image failure preserve all previous files; empty r
 });
 test('build publishes only static files, preserves CNAME and keeps honest first-run fallback', async t => {
   const root = await workspace(t);
-  for (const file of ['index.html', 'style.css', 'script.js', 'instagram-feed.js']) await cp(file, join(root, file));
+  for (const file of ['index.html', 'style.css', 'script.js', 'instagram-feed.js', 'markets.js', 'market-data.js', 'supabase-config.js', 'admin.html', 'admin.css', 'admin.js']) await cp(file, join(root, file));
   await mkdir(join(root, 'assets'));
+  await mkdir(join(root, 'data'), { recursive: true });
+  await cp('data/markets.json', join(root, 'data/markets.json'));
   await writeFile(join(root, '.env'), 'DO_NOT_PUBLISH');
   await writeFile(join(root, 'CNAME'), 'example.com');
   await build(root);

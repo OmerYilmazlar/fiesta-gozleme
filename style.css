@@ -64,3 +64,6 @@
   .instagram-body{padding:18px}
 }
 @media(prefers-reduced-motion:reduce){.instagram-track{scroll-behavior:auto}}
+
+/* Managed market colours retain readable foreground text. */
+.market-card[data-managed] :is(h3,p,dt,dd,.postcode,.underlink){color:inherit}.market-card[data-managed] .underlink{border-color:currentColor}
