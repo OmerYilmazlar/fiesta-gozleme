@@ -3,9 +3,34 @@
 Live site: https://omeryilmazlar.github.io/fiesta-gozleme/
 Repository: https://github.com/OmerYilmazlar/fiesta-gozleme
 
-GitHub Pages deployed successfully on 17 November 2026. The first runner-side Instagram refresh returned HTTP 302, so the existing saved posts were deployed. Daily attempts are enabled at 06:17 UTC; successful automatic refreshes from GitHub remain unverified. No redirect/login bypass was attempted.
+GitHub Pages is live. Instagram redirects GitHub-hosted runners to a login page, while signed-out fetching has succeeded on this Windows computer. Daily refreshes now run locally; GitHub Actions only tests, builds and deploys pushed content. The saved feed survives any fetch failure.
 
-A subsequent manual GitHub retry also failed. The diagnostic run confirmed that Instagram redirects the GitHub runner to **a login page**, not simply a renamed public URL. A fresh signed-out local run succeeded and returned the same three posts unchanged. Following the login redirect would not provide a usable feed. The provider stops there and keeps the saved feed. For dependable hosted automation, use the authorized official provider after professional-account setup. While retaining a personal account, a local `npm.cmd run update:instagram` can refresh the saved files when public access works; commit and push changed `data/instagram.json` and `assets/instagram/` to publish them. Local public access is also best-effort, not guaranteed.
+## Daily Windows task
+
+Task name: **Fiesta Gozleme - Instagram refresh**. It runs at **06:17 local Windows time** (this computer uses the London time zone, including daylight saving) and catches up at sign-in or after a missed start. A success marker prevents more than one successful refresh per London calendar day. Failed runs can retry twice at 30-minute intervals.
+
+The computer must be on, online and signed into this Windows user account. A locked screen is fine; the task cannot run while the computer is off or the user is signed out. It does not wake the computer or store a Windows/Instagram password. Existing Git Credential Manager credentials authorize pushes. If Git authentication expires, reauthenticate interactively through your normal Git tooling; the task itself never prompts.
+
+The task uses a separate checkout at `.local-automation/repo/`, so it does not touch this working folder's edits or staging area. It fetches `main`, accepts only a fast-forward update, installs locked dependencies when needed, fetches and validates Instagram, and validates the static build. Only `data/instagram.json` and hashed images in `assets/instagram/` may be committed and pushed. Caption/media edits also count as changes. If nothing changed, there is no commit. The commit intentionally has no `[skip ci]`, allowing Pages to redeploy. A rejected push stays local for a later safe retry; divergent history or unexpected files stop the job without resetting or force-pushing.
+
+The isolated checkout follows current code on `main`. The task launcher lives in this project's `scripts/` folder; keep this folder at its installed path. If you move it or change Node/Git installation paths, rerun the installer.
+
+```powershell
+# Install/update the task for the current Windows user:
+.\scripts\install-instagram-task.ps1
+# Run through Task Scheduler now (respects the once-per-day guard):
+Start-ScheduledTask -TaskName 'Fiesta Gozleme - Instagram refresh'
+# Inspect Windows status and next scheduled start:
+Get-ScheduledTaskInfo -TaskName 'Fiesta Gozleme - Instagram refresh'
+# Force an extra manual refresh today, only when the task is not running:
+.\scriptsun-instagram-task.ps1 -ForceRun
+# Pause automatic updates:
+Disable-ScheduledTask -TaskName 'Fiesta Gozleme - Instagram refresh'
+# Resume:
+Enable-ScheduledTask -TaskName 'Fiesta Gozleme - Instagram refresh'
+```
+
+Logs: `.local-automation/logs/YYYY-MM-DD.log`. Last successful result: `.local-automation/status.json`. These files, dependencies and the automation checkout are Git-ignored and never published. A nonzero task result means failure; inspect the dated log. If the process was forcibly interrupted, inspect the checkout and ensure no updater is running before removing the empty `.local-automation/running.lock` directory. No credentials are written to these files. Task settings use Microsoft's [ScheduledTasks module](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset).
 
 Open http://127.0.0.1:8000 while the preview server is running.
 To restart from this folder: `python -m http.server 8000 --bind 127.0.0.1`
@@ -39,9 +64,9 @@ Validation: the page and all 14 file dependencies return HTTP 200 locally; all 1
 
 ### Current connection: public HTML (personal account)
 
-Fiesta uses a personal Instagram account. `instagram.config.json` therefore selects `"provider": "public-html"`; this requires **no Meta credentials or GitHub Instagram Secrets**. `scripts/providers/public-instagram.mjs` requests the public profile and its publicly exposed post pages with no login, cookies or private API endpoints. It reads embedded JSON, validates account ownership, obtains each candidate's actual publication timestamp, sorts and selects the newest three. It supports the public image, album and video structures and preserves full captions as returned. Refresh with `npm.cmd run update:instagram`, then `npm.cmd run build`.
+Fiesta uses a personal Instagram account. `instagram.config.json` therefore selects `"provider": "public-html"`; this requires **no Meta credentials or GitHub Instagram Secrets**. `scripts/providers/public-instagram.mjs` requests the public profile and its publicly exposed post pages with no login, cookies or private API endpoints. It reads embedded JSON, validates account ownership, obtains each candidate's actual publication timestamp, sorts and selects the newest three. It supports the public image, album and video structures and preserves full captions as returned. For a one-off preview update, run `npm.cmd run update:instagram`, then `npm.cmd run build`. The installed Windows task handles automatic commits and pushes in its separate checkout.
 
-This is a **best-effort scraper**, not an official API or a guaranteed complete account feed. Instagram exposes only a subset of posts in signed-out HTML; this provider can establish the newest three within that subset, but cannot prove no newer post has been withheld. Pinned grid positions do not determine ordering. Markup changes, rate limits, login walls or different access from GitHub runner IPs can break it. Redirects/access blocks and incomplete candidate records fail safely; there is no cookie extraction, CAPTCHA bypass, proxy rotation or hidden fallback to older photos. Existing committed posts remain available after failures. Monitor failed daily workflows and manually verify the first GitHub-hosted run.
+This is a **best-effort scraper**, not an official API or a guaranteed complete account feed. Instagram exposes only a subset of posts in signed-out HTML; this provider can establish the newest three within that subset, but cannot prove no newer post has been withheld. Pinned grid positions do not determine ordering. Markup changes, rate limits, login walls or different access from GitHub runner IPs can break it. Redirects/access blocks and incomplete candidate records fail safely; there is no cookie extraction, CAPTCHA bypass, proxy rotation or hidden fallback to older photos. Existing committed posts remain available after failures. Monitor the Windows task log; the local network can also become subject to access restrictions.
 
 The previously implemented official provider remains available by changing `provider` to `"meta-facebook"`, after converting to a professional account and completing the optional setup below. The carousel, saved feed format and deployment workflow are shared by both providers.
 
@@ -53,7 +78,7 @@ The optional `scripts/providers/meta-facebook.mjs` verifies the account username
 
 All records and images must validate before the updater atomically replaces `data/instagram.json`. Failed fetches/downloads leave the previous JSON and images intact. Immutable image generations remain in `assets/instagram/` so cached pages and rollbacks still work; storage grows only when images change or new posts arrive. Periodically remove unreferenced old generations if needed, retaining images used by the current and previous deployment. If a post must be removed for rights/privacy reasons, remove its local copies and history as appropriate as well as refreshing the feed.
 
-The workflow commits generated data/assets to the default branch, providing durable storage across runners. It then builds and deploys in the **same workflow**; it does not depend on a bot commit triggering a second workflow. Non-fast-forward pushes or disallowed bot writes stop deployment safely. Overlapping deployments are serialized. Commit the locally fetched `data/instagram.json` and `assets/instagram/` with the initial project upload so the first deployment can retain them even if a runner cannot access Instagram.
+The Windows task commits generated data/assets to `main`, providing durable storage on GitHub. Its push triggers the Pages workflow, which never fetches Instagram. Existing committed posts deploy even when Instagram is unavailable. Deployments are serialized.
 
 `instagram-feed.js` renders captions as plain text, with expandable captions, dates, links and video/album badges. Desktop uses three columns; narrower screens use native touch scrolling with circular Previous/Next arrows, clickable position dots, arrow keys, Home/End, and reduced-motion handling. The native mobile scrollbar is hidden; swiping still works. Cards stretch to equal heights with aligned footer links. No automatic sliding. Cover images use `object-fit: contain` and reserved square space. The build pre-renders saved cards to avoid a large feed-related layout shift; the browser adds interactions. No third-party widget or tracking script is used. Public-page extraction runs in Node, never in visitors' browsers.
 
@@ -99,24 +124,19 @@ These two Instagram Secrets are **only for the optional `meta-facebook` provider
 
 Long-lived Facebook User tokens generally last about **60 days**. Inspect the actual expiration in Meta's Access Token Debugger and set an owner reminder before expiry (for example, day 45). Obtain a fresh authorized token, exchange it using Meta's tooling, replace `INSTAGRAM_ACCESS_TOKEN`, and manually refresh. Expired or revoked tokens require reauthorization; daily read requests in this Node workflow do **not** implement automatic token renewal. This is the Facebook token flow, not Instagram Login's `ig_refresh_token` flow. See [Meta's long-lived token guide](https://developers.facebook.com/documentation/facebook-login/guides/access-tokens/get-long-lived).
 
-### Enable GitHub Pages
+### GitHub Pages deployment
 
-1. Select/create the intended GitHub repository and upload/commit this project to its default branch, including `package-lock.json` and `.github/workflows/pages.yml`. Do not upload `node_modules`, `dist`, credentials, logs or the original HTML backup. This project is now connected to `OmerYilmazlar/fiesta-gozleme` on `main`.
-2. Select **Settings → Pages → Build and deployment → Source: GitHub Actions**. The workflow uses GitHub's supported configure/upload/deploy Pages actions. See [GitHub's Pages workflow guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
-3. Ensure Actions is enabled and repository policy permits this workflow's `contents: write` to commit generated files. The default branch rules must allow the bot's feed commits; do not weaken protections without deciding the appropriate rule exception. If direct bot commits are prohibited, adapt the persistence design before enabling refreshes. Permit the default branch in the `github-pages` environment.
-4. For `public-html`, no Instagram Secrets are needed. For `meta-facebook`, add the two Secrets above. Push to the default branch or open **Actions → Refresh Instagram and deploy Pages → Run workflow** and select the default branch. Confirm both refresh and deployment succeed. The deployed URL appears in the deployment environment.
+The repository is `OmerYilmazlar/fiesta-gozleme`, default branch `main`; Pages source is **GitHub Actions**. `.github/workflows/pages.yml` deploys pushes to the actual default branch and manual runs through **Actions ? Deploy Pages ? Run workflow**. It uses `npm ci --ignore-scripts`, runs the tests, builds `dist/`, and uploads/deploys the Pages artifact. Build has read-only repository access; the deployment job has only Pages and identity-token write permissions. No Instagram credentials are needed for deployment.
 
-Pushes to the actual default branch deploy code (no hardcoded `main` assumption). Other branches are skipped. Manual and daily runs attempt a refresh and only deploy after success. A failed scheduled/manual refresh is a failed workflow and leaves the live deployment untouched. A push still deploys code using the last committed feed if Instagram is unavailable, with a warning in the run summary. Before the first success it deploys the profile-link fallback.
-
-The schedule is **06:17 UTC daily** (`17 6 * * *`). GitHub schedules run from the default branch and can be delayed or dropped under load; public-repository schedules can be disabled after 60 days of repository inactivity. It is not a guaranteed real-time feed. See [GitHub scheduled events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+There is no longer a GitHub cron job: the Windows task performs the daily fetch and pushes changes using your existing Git credentials. This avoids the confirmed GitHub-runner login redirect. The local task schedule is in `scripts/install-instagram-task.ps1`; edit its `06:17` trigger and rerun that installer to change the time.
 
 ### Maintenance and troubleshooting
 
-- Check the **Refresh Instagram** step and workflow summary first. Messages intentionally omit remote bodies/URLs and token values. HTTP 400/401/403 usually warrants checking token validity, granted scopes, Page roles, account linkage and app access in Meta's tools. HTTP 429 or network errors warrant a later manual retry.
-- Account mismatch means the configured ID/token does not resolve to `fiestagozleme`. Fix the Secrets, not the feed JSON.
+- Check the dated Windows task log first. Messages intentionally omit remote bodies/URLs and token values. HTTP 400/401/403 usually warrants checking token validity, granted scopes, Page roles, account linkage and app access in Meta's tools. HTTP 429 or network errors warrant a later manual retry.
+- Account mismatch means the configured ID/token does not resolve to `fiestagozleme`. Fix the optional official provider credentials, not the feed JSON.
 - Missing thumbnails, invalid JSON/HTML, bad pagination or corrupt images fail the whole refresh. No older photo is substituted for an inaccessible newer video. Retained content remains dated so visitors can judge it.
 - If commits fail, check branch rules and token permissions. If deployment fails, check Pages source, environment protections and Actions policy. Retry manually; never force-push generated content.
-- Change `postCount` in `instagram.config.json` to change the count. The carousel handles the returned count; desktop remains three columns. Change the cron in `.github/workflows/pages.yml` to change refresh time. Update `apiVersion` deliberately after reviewing Meta's changelog.
+- Change `postCount` in `instagram.config.json` to change the count. The carousel handles the returned count; desktop remains three columns. Change the time in `scripts/install-instagram-task.ps1` and reinstall the task to change refresh time. Update `apiVersion` deliberately after reviewing Meta's changelog.
 - `npm.cmd test` covers chronology/pinned posts, duplicates, one/two/three posts, Unicode/multiline/long captions, albums/videos, edits, invalid responses, failed downloads, atomic preservation, safe URLs, Pages base paths, keyboard/control behavior, caption expansion and existing menu/market/filling interactions. DOM tests simulate scroll geometry; they do not establish real device rendering or touch behavior. Browser verification was stopped by the computer-use tool because it could not determine Chrome's current URL with sufficient confidence.
 
-Acceptance still required: a successful refresh on a GitHub runner and desktop/mobile visual and touch checks against real posts. The signed-out local fetch and Pages deployment have succeeded; runner-side automatic refreshes have not.
+The signed-out local fetch and Pages deployment have succeeded. The Windows task performs best-effort public fetching; it does not turn the scraper into a guaranteed API connection.

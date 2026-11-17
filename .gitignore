@@ -7,3 +7,4 @@ dist/
 !.env.example
 index.original.html
 graphify-out/
+.local-automation/
