@@ -1,0 +1,81 @@
+name: Refresh Instagram and deploy Pages
+
+on:
+  push:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fiesta-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Works with main, master, or a renamed default branch; never publish feature branches.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # Persist only the validated JSON and downloaded images.
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Refresh Instagram (failure leaves committed feed untouched)
+        id: refresh
+        continue-on-error: true
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+        run: npm run update:instagram
+      - name: Report refresh failure
+        if: steps.refresh.outcome == 'failure'
+        run: |
+          echo '::warning::Instagram refresh failed. Last successful feed is preserved. Check the refresh step and account authorization.'
+          echo 'Instagram refresh failed; existing feed retained. See the refresh log and README setup instructions.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail scheduled/manual refresh without changing the live site
+        if: steps.refresh.outcome == 'failure' && github.event_name != 'push'
+        run: exit 1
+      - name: Persist validated feed before publishing
+        if: steps.refresh.outcome == 'success'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git add -- data/instagram.json assets/instagram/
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Update Instagram feed [skip ci]'
+            # A concurrent human push makes this fail safely; no force-push or stale deploy.
+            git push origin "HEAD:$DEFAULT_BRANCH"
+          fi
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy this run's artifact (bot commits do not trigger another workflow)
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,21 @@
+{
+  "name": "fiesta-gozleme",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/feed.test.mjs tests/ui.test.mjs",
+    "build": "node scripts/build.mjs",
+    "update:instagram": "node scripts/update-instagram.mjs",
+    "start": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "linkedom": "0.18.12"
+  }
+}
