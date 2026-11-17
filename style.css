@@ -67,3 +67,15 @@
 
 /* Managed market colours retain readable foreground text. */
 .market-card[data-managed] :is(h3,p,dt,dd,.postcode,.underlink){color:inherit}.market-card[data-managed] .underlink{border-color:currentColor}
+
+/* Give trading information a clear, readable hierarchy on every screen. */
+.market-card .postcode{font-size:12px;font-weight:700;letter-spacing:1.3px;margin-bottom:16px}
+.market-card h3{font-size:clamp(28px,2.2vw,34px);line-height:1.15;letter-spacing:-.5px;max-width:none;margin-bottom:18px}
+.market-card .residency{font-size:15px;line-height:1.6;margin-bottom:22px}
+.market-card dl{font-size:16px;line-height:1.5;max-width:none;margin-bottom:28px}
+.market-card dl div{padding:11px 0;gap:8px 16px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.market-card dl div:last-child{border-bottom:0}
+.market-card dt{font-weight:600}
+.market-card dd{font-weight:700;font-variant-numeric:tabular-nums;margin-left:auto}
+.market-card .underlink{font-size:15px;font-weight:700;line-height:1.5;padding:10px 0}
+@media(max-width:600px){.market-card dl{font-size:15px}.market-card dl div{padding:10px 0}.market-card .residency{font-size:15px}}
