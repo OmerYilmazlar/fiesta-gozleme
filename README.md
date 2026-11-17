@@ -5,6 +5,8 @@ Repository: https://github.com/OmerYilmazlar/fiesta-gozleme
 
 GitHub Pages deployed successfully on 17 November 2026. The first runner-side Instagram refresh returned HTTP 302, so the existing saved posts were deployed. Daily attempts are enabled at 06:17 UTC; successful automatic refreshes from GitHub remain unverified. No redirect/login bypass was attempted.
 
+A subsequent manual GitHub retry also failed. The diagnostic run confirmed that Instagram redirects the GitHub runner to **a login page**, not simply a renamed public URL. A fresh signed-out local run succeeded and returned the same three posts unchanged. Following the login redirect would not provide a usable feed. The provider stops there and keeps the saved feed. For dependable hosted automation, use the authorized official provider after professional-account setup. While retaining a personal account, a local `npm.cmd run update:instagram` can refresh the saved files when public access works; commit and push changed `data/instagram.json` and `assets/instagram/` to publish them. Local public access is also best-effort, not guaranteed.
+
 Open http://127.0.0.1:8000 while the preview server is running.
 To restart from this folder: `python -m http.server 8000 --bind 127.0.0.1`
 
