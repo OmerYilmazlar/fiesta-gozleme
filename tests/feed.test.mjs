@@ -38,6 +38,11 @@ test('public provider stops at login redirects, blocked requests or missing stru
     await assert.rejects(fetchPublicPosts({ config, fetchImpl: async () => response }));
   }
 });
+test('redirect diagnostics identify login gates without exposing query parameters', async () => {
+  await assert.rejects(fetchPublicPosts({ config, fetchImpl: async () => new Response(null, {
+    status: 302, headers: { location: 'https://www.instagram.com/accounts/login/?secret=do-not-log' }
+  }) }), error => error.message.includes('a login page (HTTP 302)') && !error.message.includes('do-not-log'));
+});
 async function workspace(t) {
   const root = await mkdtemp(join(tmpdir(), 'fiesta-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));

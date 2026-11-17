@@ -46,6 +46,16 @@ async function publicHtml(url, fetchImpl) {
   try {
     const response = await fetchImpl(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' },
       redirect: 'manual', signal: AbortSignal.timeout(30000) });
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      let target;
+      try { target = new URL(response.headers.get('location'), url); } catch { /* Malformed redirect. */ }
+      const instagram = target && ['instagram.com', 'www.instagram.com'].includes(target.hostname);
+      const destination = instagram && /^\/accounts\/login(?:\/|$)/.test(target.pathname) ? 'a login page'
+        : instagram && /^\/(challenge|checkpoint)(?:\/|$)/.test(target.pathname) ? 'an access challenge'
+        : instagram ? 'another Instagram page' : 'an unrecognized destination';
+      // Only classify the destination; never log query strings or follow access gates.
+      throw new FeedError(`Instagram redirected to ${destination} (HTTP ${response.status}). No redirect followed; saved feed retained.`);
+    }
     if (!response.headers.get('content-type')?.includes('text/html')) throw new FeedError('Instagram did not return public HTML.');
     return (await readResponse(response, 5 * 1024 * 1024)).toString('utf8');
   } catch (error) {
