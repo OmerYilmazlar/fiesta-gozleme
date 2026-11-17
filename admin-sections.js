@@ -16,7 +16,9 @@ export function createSectionEditor({ api, status }) {
     previewReady = true; const doc = $('#section-preview').contentDocument;
     // The preview has no script permission; disable navigation as well.
     doc.addEventListener('click', e => e.preventDefault());
-    preview(); doc.querySelector(section()?.target)?.scrollIntoView();
+    preview();
+    const target = doc.querySelector(section()?.target), frameWindow = $('#section-preview').contentWindow;
+    if (target) frameWindow.scrollTo(0, target.getBoundingClientRect().top + frameWindow.scrollY);
   });
   async function upload(file) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw Error('Choose a JPG, PNG or WebP image smaller than 5 MB.');
