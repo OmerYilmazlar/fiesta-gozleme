@@ -4,8 +4,49 @@ import { readFile } from 'node:fs/promises';
 import { parseHTML } from 'linkedom';
 import { sections, extractContent, validateContent, applyContent, safeLink, safeImage } from '../section-content.js';
 import { supabaseUrl } from '../supabase-config.js';
+import { StagedImages } from '../staged-images.js';
+import { cleanupImages, sweepImages, imagePrefix } from '../image-storage.js';
 const html = await readFile('index.html', 'utf8');
 const defaults = JSON.parse(await readFile('data/site-content.json', 'utf8'));
+test('trying, replacing and discarding images only manages browser memory', () => {
+  const revoked = []; let count = 0;
+  const staged = new StagedImages({ createObjectURL: () => `blob:preview-${++count}`, revokeObjectURL: url => revoked.push(url) });
+  staged.set('hero', new Blob(['first']));
+  staged.set('hero', new Blob(['second']));
+  assert.deepEqual(revoked, ['blob:preview-1']);
+  assert.equal(staged.get('hero').previewUrl, 'blob:preview-2');
+  staged.remove('hero');
+  assert.equal(staged.items.size, 0);
+  staged.set('gallery', new Blob(['third'])); staged.clear();
+  assert.deepEqual(revoked, ['blob:preview-1', 'blob:preview-2', 'blob:preview-3']);
+});
+test('cleanup preserves originals and images used in any section', async () => {
+  const removed = [];
+  const api = async (path, options) => {
+    if (path.startsWith('/rest/')) return [{ content: { hero_image: imagePrefix + 'hero/shared.webp' } }, { content: { photo1_image: imagePrefix + 'gallery/active.webp' } }];
+    removed.push(...JSON.parse(options.body).prefixes); return removed;
+  };
+  const result = await cleanupImages(api, ['assets/photo-49.jpg', imagePrefix + 'hero/shared.webp', imagePrefix + 'gallery/active.webp', imagePrefix + 'hero/old.webp', imagePrefix + '../bad.webp']);
+  assert.deepEqual(removed, ['hero/old.webp']);
+  assert.equal(result.failed, false);
+  assert.equal((await cleanupImages(async () => { throw Error('offline'); }, [imagePrefix + 'hero/old.webp'])).failed, true);
+});
+test('orphan sweep waits an hour, handles pagination and rechecks references', async () => {
+  const removed = [], now = Date.parse('2026-11-17T12:00:00Z');
+  const api = async (path, options) => {
+    if (path.startsWith('/rest/')) return [{ content: { active: imagePrefix + 'hero/active.webp' } }];
+    if (path.includes('/list/')) {
+      const { offset } = JSON.parse(options.body);
+      if (offset === 100) return [{ id: 'end', name: 'last.webp', created_at: '2026-11-17T09:00:00Z' }];
+      return Array.from({ length: 100 }, (_, i) => ({ id: String(i), name: i === 0 ? 'active.webp' : i === 1 ? 'recent.webp' : `old-${i}.webp`, created_at: i === 1 ? '2026-11-17T11:45:00Z' : '2026-11-17T09:00:00Z' }));
+    }
+    const batch = JSON.parse(options.body).prefixes; removed.push(...batch); return batch;
+  };
+  assert.equal((await sweepImages(api, ['hero'], now)).failed, false);
+  assert.equal(removed.length, 99);
+  assert.ok(!removed.includes('hero/active.webp')); assert.ok(!removed.includes('hero/recent.webp'));
+  assert.ok(removed.includes('hero/last.webp'));
+});
 test('all eleven sections have valid targets and defaults matching the site', () => {
   const { document } = parseHTML(html);
   assert.equal(sections.length, 11);
