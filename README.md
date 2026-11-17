@@ -1,4 +1,9 @@
-﻿# Fiesta Gozleme local preview
+﻿# Fiesta Gozleme
+
+Live site: https://omeryilmazlar.github.io/fiesta-gozleme/
+Repository: https://github.com/OmerYilmazlar/fiesta-gozleme
+
+GitHub Pages deployed successfully on 17 November 2026. The first runner-side Instagram refresh returned HTTP 302, so the existing saved posts were deployed. Daily attempts are enabled at 06:17 UTC; successful automatic refreshes from GitHub remain unverified. No redirect/login bypass was attempted.
 
 Open http://127.0.0.1:8000 while the preview server is running.
 To restart from this folder: `python -m http.server 8000 --bind 127.0.0.1`
@@ -28,7 +33,7 @@ Validation: the page and all 14 file dependencies return HTTP 200 locally; all 1
 
 ## Instagram news and GitHub Pages
 
-**A real, unauthenticated public-page fetch succeeded on 17 November 2026**, saving three real posts and local preview images. GitHub deployment and scheduled fetching from GitHub runners have not been tested or activated. This folder initially had no `.git`, remote, workflow, lockfile or custom domain. There are no invented production announcements. If no saved valid feed exists, the section immediately above the family story shows a compact Instagram profile link.
+**A real, unauthenticated public-page fetch succeeded on 17 November 2026**, saving three real posts and local preview images. GitHub deployment is verified; the first runner-side fetch failed safely with HTTP 302. The daily schedule is enabled. This folder initially had no `.git`, remote, workflow, lockfile or custom domain. There are no invented production announcements. If no saved valid feed exists, the section immediately above the family story shows a compact Instagram profile link.
 
 ### Current connection: public HTML (personal account)
 
@@ -94,7 +99,7 @@ Long-lived Facebook User tokens generally last about **60 days**. Inspect the ac
 
 ### Enable GitHub Pages
 
-1. Select/create the intended GitHub repository and upload/commit this project to its default branch, including `package-lock.json` and `.github/workflows/pages.yml`. Do not upload `node_modules`, `dist`, credentials, logs or the original HTML backup. No remote has been chosen automatically.
+1. Select/create the intended GitHub repository and upload/commit this project to its default branch, including `package-lock.json` and `.github/workflows/pages.yml`. Do not upload `node_modules`, `dist`, credentials, logs or the original HTML backup. This project is now connected to `OmerYilmazlar/fiesta-gozleme` on `main`.
 2. Select **Settings → Pages → Build and deployment → Source: GitHub Actions**. The workflow uses GitHub's supported configure/upload/deploy Pages actions. See [GitHub's Pages workflow guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 3. Ensure Actions is enabled and repository policy permits this workflow's `contents: write` to commit generated files. The default branch rules must allow the bot's feed commits; do not weaken protections without deciding the appropriate rule exception. If direct bot commits are prohibited, adapt the persistence design before enabling refreshes. Permit the default branch in the `github-pages` environment.
 4. For `public-html`, no Instagram Secrets are needed. For `meta-facebook`, add the two Secrets above. Push to the default branch or open **Actions → Refresh Instagram and deploy Pages → Run workflow** and select the default branch. Confirm both refresh and deployment succeed. The deployed URL appears in the deployment environment.
@@ -112,4 +117,4 @@ The schedule is **06:17 UTC daily** (`17 6 * * *`). GitHub schedules run from th
 - Change `postCount` in `instagram.config.json` to change the count. The carousel handles the returned count; desktop remains three columns. Change the cron in `.github/workflows/pages.yml` to change refresh time. Update `apiVersion` deliberately after reviewing Meta's changelog.
 - `npm.cmd test` covers chronology/pinned posts, duplicates, one/two/three posts, Unicode/multiline/long captions, albums/videos, edits, invalid responses, failed downloads, atomic preservation, safe URLs, Pages base paths, keyboard/control behavior, caption expansion and existing menu/market/filling interactions. DOM tests simulate scroll geometry; they do not establish real device rendering or touch behavior. Browser verification was stopped by the computer-use tool because it could not determine Chrome's current URL with sufficient confidence.
 
-Acceptance still required: a successful refresh on a GitHub runner, a successful Pages deployment, and desktop/mobile visual and touch checks against real posts. The signed-out local fetch has succeeded; automatic hosted updates are not operational until the GitHub integration steps have succeeded.
+Acceptance still required: a successful refresh on a GitHub runner and desktop/mobile visual and touch checks against real posts. The signed-out local fetch and Pages deployment have succeeded; runner-side automatic refreshes have not.
