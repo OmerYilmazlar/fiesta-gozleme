@@ -1,3 +1,4 @@
+import { createSectionEditor } from './admin-sections.js';
 import { supabaseUrl, supabaseKey } from './supabase-config.js';
 import { days, validateMarket, londonClock } from './market-data.js';
 
@@ -9,12 +10,17 @@ async function api(path, options = {}) {
   const r = await fetch(`${supabaseUrl}${path}`, { ...options, headers: { apikey: supabaseKey, ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', Prefer: 'return=representation', ...options.headers }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) {
     if (r.status === 401) throw Error('Your session has expired. Copy any unsaved changes, then sign out and sign in again.');
-    if (r.status === 404) throw Error('The market database is not set up yet. Run the supplied SQL setup file in Supabase.');
+    if (r.status === 404 || r.status === 400 && path.startsWith('/storage/')) throw Error('This feature needs database setup. For website sections and image uploads, run 003-site-sections.sql in Supabase.');
     throw Error('Request failed. Check your connection, account permissions and database setup, then try again.');
   }
-  return r.status === 204 ? null : r.json();
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
 }
-function safeToClose() { return !dirty || confirm('Discard your unsaved changes?'); }
+const contentEditor = createSectionEditor({ api, status });
+function safeToClose() {
+  if (contentEditor.isBusy()) { status('Please wait for publishing or uploading to finish.'); return false; }
+  return !(dirty || contentEditor.hasChanges()) || confirm('Discard your unsaved changes?');
+}
 function clearEditor() { form.hidden = true; dirty = false; current = null; }
 async function load() {
   locations = await api('/rest/v1/markets?select=*&order=sort_order.asc,name.asc');
@@ -65,20 +71,20 @@ $('#login').onsubmit = async event => {
     token = result.access_token; event.target.elements.password.value = '';
     const approved = await api(`/rest/v1/market_editors?select=user_id&user_id=eq.${encodeURIComponent(result.user.id)}`);
     if (!approved.length) { token = null; throw Error('This account has not been approved as a Fiesta editor. Ask the project owner to add it.'); }
-    await load(); $('#login').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; status('Signed in. Select a location or add a new one.');
+    await load(); $('#market-workspace').hidden = false; $('#content-workspace').hidden = true; $('#show-markets').setAttribute('aria-pressed', 'true'); $('#show-content').setAttribute('aria-pressed', 'false'); $('#login').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; status('Signed in. Select a location or add a new one.');
   } catch (e) { token = null; status(e.message); } finally { button.disabled = false; }
 };
 $('#logout').onclick = async () => {
   if (!safeToClose()) return;
   try { await api('/auth/v1/logout', { method: 'POST' }); } catch { /* Clear local access even if offline. */ }
-  token = null; locations = []; clearEditor(); $('#locations').replaceChildren(); $('#workspace').hidden = true; $('#logout').hidden = true; $('#login').hidden = false; status('Signed out.');
+  token = null; locations = []; contentEditor.clear(); clearEditor(); $('#locations').replaceChildren(); $('#workspace').hidden = true; $('#logout').hidden = true; $('#login').hidden = false; status('Signed out.');
 };
 $('#new').onclick = () => { if (safeToClose()) open(); };
 $('#cancel').onclick = () => { if (safeToClose()) clearEditor(); };
 $('#add-date').onclick = () => { addRow({ date: '', start: '11:30', end: '14:30' }); dirty = true; };
 form.oninput = () => { dirty = true; };
 form.onchange = () => { dirty = true; };
-window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (dirty || contentEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
 form.onsubmit = async event => {
   event.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
@@ -102,3 +108,13 @@ $('#delete').onclick = async () => {
     clearEditor(); await load(); status('Location deleted.');
   } catch (e) { status(e.message); } finally { button.disabled = false; }
 };
+
+async function changeArea(content) {
+  if (!safeToClose()) return;
+  clearEditor(); contentEditor.clear();
+  $('#market-workspace').hidden = content; $('#content-workspace').hidden = !content;
+  $('#show-markets').setAttribute('aria-pressed', String(!content)); $('#show-content').setAttribute('aria-pressed', String(content));
+  if (content) await contentEditor.load(); else status('Select a location or add a new one.');
+}
+$('#show-markets').onclick = () => changeArea(false);
+$('#show-content').onclick = () => changeArea(true);
