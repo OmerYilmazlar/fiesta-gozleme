@@ -28,6 +28,8 @@ export const sections = [
     field('intro', 'Introduction', '.giftcards-intro', 'multiline'), field('note', 'How to order', '.giftcards-note', 'multiline'),
     ...link('button', 'Gift card enquiry button', '#giftcards .button'), field('badge', 'Availability badge', '.giftcards-badge'),
     field('brand', 'Name on all cards', '.gift-card-brand'), field('card_label', 'Label on all cards', '.gift-card-label'),
+    { ...field('artwork_image', 'Optional gift card photo (replaces the card design)', '.giftcards-photo', 'image'), optional: true },
+    field('artwork_alt', 'Gift card photo: description for accessibility', '.giftcards-photo', 'alt'),
     ...[1, 2, 3].map(n => field(`amount${n}`, `Card ${n}: amount`, `.gift-card:nth-child(${n}) strong`))] },
   { id: 'instagram', label: 'Instagram section heading', target: '#instagram', fields: [field('eyebrow', 'Small heading', '#instagram .eyebrow'), field('heading', 'Heading', '#instagram-title', 'heading'), ...link('follow', 'Follow button', '.instagram-follow a')] },
   { id: 'story', label: 'Our story', target: '#story', fields: [field('eyebrow', 'Small heading', '.story-content .eyebrow'), field('heading', 'Heading', '.story-content h2', 'heading'), ...[1, 2].map(n => field(`paragraph${n}`, `Paragraph ${n}`, `.story-content > p:not(.eyebrow):nth-of-type(${n + 1})`, 'multiline')), ...link('button', 'Story button', '.story-content > a'), ...photo('story', 'Story image', '.story-art img'), field('caption', 'Image caption', '.story-art figcaption')] },
@@ -52,7 +54,7 @@ export function validateContent(section, content) {
     if (value === undefined) continue;
     if (typeof value !== 'string' || value.length > (['multiline', 'heading'].includes(f.type) ? 3000 : 1000)) throw Error(`${f.label}: text is too long.`);
     if (f.type === 'link' && !safeLink(value)) throw Error(`${f.label}: use an https:// URL, #section, mailto: or tel: link.`);
-    if (f.type === 'image' && !safeImage(value)) throw Error(`${f.label}: choose an existing image or upload a replacement.`);
+    if (f.type === 'image' && !(f.optional && value === '') && !safeImage(value)) throw Error(`${f.label}: choose an existing image or upload a replacement.`);
   }
   return content;
 }
@@ -60,7 +62,7 @@ function readText(node) { return [...node.childNodes].map(n => n.nodeType === 3 
 export function extractContent(document, section) {
   return Object.fromEntries(section.fields.map(f => {
     const n = document.querySelector(f.selector); if (!n) throw Error(`Missing content target: ${f.selector}`);
-    return [f.id, f.type === 'link' ? n.getAttribute('href') : f.type === 'image' ? n.getAttribute('src') : f.type === 'alt' ? n.getAttribute('alt') || '' : f.type === 'label' ? [...n.childNodes].find(c => c.nodeType === 3)?.textContent.trim() || '' : readText(n)];
+    return [f.id, f.type === 'link' ? n.getAttribute('href') : f.type === 'image' ? n.getAttribute('src') || '' : f.type === 'alt' ? n.getAttribute('alt') || '' : f.type === 'label' ? [...n.childNodes].find(c => c.nodeType === 3)?.textContent.trim() || '' : readText(n)];
   }));
 }
 export function applyContent(document, section, content) {
@@ -69,6 +71,7 @@ export function applyContent(document, section, content) {
     if (content[f.id] === undefined) continue;
     const value = content[f.id];
     for (const n of document.querySelectorAll(f.selector)) {
+      if (f.type === 'image' && f.optional && !value) { n.removeAttribute('src'); continue; }
       if (['link', 'image', 'alt'].includes(f.type)) { n.setAttribute({ link: 'href', image: 'src', alt: 'alt' }[f.type], value); continue; }
       if (f.type === 'label') { const text = [...n.childNodes].find(c => c.nodeType === 3); if (text) text.textContent = value + ' '; continue; }
       const emphasis = f.type === 'heading' && !!n.querySelector('em');

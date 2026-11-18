@@ -59,15 +59,15 @@ export function createSectionEditor({ api, status }) {
       if (f.type === 'heading') { const hint = document.createElement('small'); hint.textContent = 'Each new line is shown on a new line. The existing accent colour stays on the final line.'; wrap.append(hint); }
       if (f.type === 'link') { const hint = document.createElement('small'); hint.textContent = 'Use #menu, #markets, an https:// address, mailto:email or tel:number.'; wrap.append(hint); }
       if (f.type === 'image') {
-        const img = document.createElement('img'); img.className = 'image-preview'; img.src = input.value; img.alt = f.label;
+        const img = document.createElement('img'); img.className = 'image-preview'; if (input.value) img.src = input.value; img.hidden = !input.value; img.alt = f.label;
         const chooseLabel = document.createElement('label'); chooseLabel.textContent = 'Choose replacement (JPG, PNG or WebP, up to 5 MB)';
         const choose = document.createElement('input'); choose.type = 'file'; choose.accept = 'image/jpeg,image/png,image/webp'; chooseLabel.append(choose);
-        const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'secondary'; reset.textContent = 'Use original image';
-        reset.onclick = () => { staged.remove(f.id); input.value = defaults[s.id][f.id]; img.src = input.value; preview(); };
+        const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'secondary'; reset.textContent = f.optional ? 'Use original card design' : 'Use original image';
+        reset.onclick = () => { staged.remove(f.id); input.value = defaults[s.id][f.id]; if (input.value) img.src = input.value; else img.removeAttribute('src'); img.hidden = !input.value; preview(); };
         choose.onchange = async () => {
           const file = choose.files[0]; if (!file) return;
           setBusy(true); status('Preparing your image preview...');
-          try { const pending = staged.set(f.id, await prepareImage(file)); img.src = pending.previewUrl; preview(); status('Preview ready. Nothing has been uploaded. Press Publish changes to save it.'); }
+          try { const pending = staged.set(f.id, await prepareImage(file)); img.src = pending.previewUrl; img.hidden = false; preview(); status('Preview ready. Nothing has been uploaded. Press Publish changes to save it.'); }
           catch (e) { status(e.message); } finally { choose.value = ''; setBusy(false); }
         };
         wrap.append(img, chooseLabel, reset);
@@ -100,7 +100,9 @@ export function createSectionEditor({ api, status }) {
       for (const input of form.querySelectorAll('[data-content-field]')) input.value = content[input.dataset.contentField];
       for (const f of section().fields.filter(f => f.type === 'image')) {
         const input = form.querySelector(`[data-content-field="${f.id}"]`);
-        input.closest('.content-field').querySelector('.image-preview').src = content[f.id];
+        const image = input.closest('.content-field').querySelector('.image-preview');
+        if (content[f.id]) image.src = content[f.id]; else image.removeAttribute('src');
+        image.hidden = !content[f.id];
       }
       staged.clear(); changes.markSaved(); preview();
       const cleanup = await cleanupImages(api, previousImages);

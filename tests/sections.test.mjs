@@ -12,15 +12,23 @@ const defaults = JSON.parse(await readFile('data/site-content.json', 'utf8'));
 
 test('gift card editor loads, previews, publishes, reopens and preserves unsaved edits on conflicts', async () => {
   const { document, window } = parseHTML(await readFile('admin.html', 'utf8'));
-  const globals = { document: globalThis.document, fetch: globalThis.fetch, setInterval: globalThis.setInterval, confirm: globalThis.confirm };
+  const globals = { document: globalThis.document, fetch: globalThis.fetch, setInterval: globalThis.setInterval, confirm: globalThis.confirm, createImageBitmap: globalThis.createImageBitmap };
   const previewDoc = parseHTML(html).document;
   let message = '', conflict = false, patches = 0;
+  const uploaded = [], deleted = [];
   let rows = sections.map(s => ({ id: s.id, content: {}, updated_at: '2026-11-18T00:00:00Z' }));
   try {
     globalThis.document = document;
     globalThis.fetch = async () => ({ ok: true, json: async () => defaults });
     globalThis.setInterval = () => 0;
     globalThis.confirm = () => true;
+    globalThis.createImageBitmap = async () => ({ width: 480, height: 853, close() {} });
+    const createElement = document.createElement.bind(document);
+    document.createElement = name => {
+      const node = createElement(name);
+      if (name === 'canvas') { node.getContext = () => ({ drawImage() {} }); node.toBlob = cb => cb(new Blob(['prepared-image'], { type: 'image/webp' })); }
+      return node;
+    };
     document.querySelector('#workspace').hidden = false;
     document.querySelector('#content-workspace').hidden = false;
     const picker = document.querySelector('#section-picker');
@@ -38,6 +46,8 @@ test('gift card editor loads, previews, publishes, reopens and preserves unsaved
         rows = rows.map(r => r.id === row.id ? row : r); return [row];
       }
       if (path.includes('/list/')) return [];
+      if (path.startsWith('/storage/v1/object/site-images/') && options.method === 'POST') { uploaded.push(path); return {}; }
+      if (path === '/storage/v1/object/site-images' && options.method === 'DELETE') { const paths = JSON.parse(options.body).prefixes; deleted.push(...paths); return paths; }
       if (path.startsWith('/rest/')) return rows;
       throw Error('Unexpected API call: ' + path);
     } });
@@ -62,6 +72,26 @@ test('gift card editor loads, previews, publishes, reopens and preserves unsaved
     const destination = form.querySelector('[data-content-field="button_link"]'); destination.value = 'javascript:alert(1)';
     await form.onsubmit({ preventDefault() {} }); assert.equal(patches, 2); assert.match(message, /https/);
     document.querySelector('#section-revert').onclick(); assert.equal(editor.hasChanges(), false);
+    conflict = false;
+    const imageField = form.querySelector('[data-content-field="artwork_image"]');
+    assert.equal(imageField.value, '');
+    const imageWrap = imageField.closest('.content-field'), choose = imageWrap.querySelector('[type=file]');
+    Object.defineProperty(choose, 'files', { value: [new Blob(['chosen-image'], { type: 'image/png' })] });
+    frame.dispatchEvent(new window.Event('load'));
+    await choose.onchange();
+    assert.equal(uploaded.length, 0); assert.equal(editor.hasChanges(), true);
+    assert.match(previewDoc.querySelector('.giftcards-photo').getAttribute('src'), /^blob:/);
+    imageWrap.querySelector('button').onclick();
+    assert.equal(editor.hasChanges(), false); assert.equal(previewDoc.querySelector('.giftcards-photo').hasAttribute('src'), false);
+    await choose.onchange(); await form.onsubmit({ preventDefault() {} });
+    assert.equal(uploaded.length, 1); assert.equal(editor.hasChanges(), false);
+    assert.match(imageField.value, /site-images\/giftcards\/.+\.webp$/);
+    imageWrap.querySelector('button').onclick(); await form.onsubmit({ preventDefault() {} });
+    assert.equal(rows.find(r => r.id === 'giftcards').content.artwork_image, '');
+    assert.equal(deleted.length, 1); assert.match(deleted[0], /^giftcards\//);
+    assert.equal(previewDoc.querySelector('.giftcards-photo').hasAttribute('src'), false);
+    assert.equal(imageWrap.querySelector('.image-preview').hidden, true);
+    assert.equal(editor.hasChanges(), false);
   } finally { Object.assign(globalThis, globals); }
 });
 test('trying, replacing and discarding images only manages browser memory', () => {

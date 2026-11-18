@@ -3,7 +3,24 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { command, feedOnly, publishFeedChanges } from '../scripts/local-instagram-task.mjs';
+import { command, feedOnly, publishFeedChanges, refreshSlot, alreadyRefreshed } from '../scripts/local-instagram-task.mjs';
+
+test('morning and 9 PM checks are distinct, deduplicated and follow London daylight saving', () => {
+  const slot = iso => refreshSlot(new Date(iso));
+  assert.equal(slot('2026-11-18T06:16:00Z'), '2026-11-17@21:00');
+  assert.equal(slot('2026-11-18T06:17:00Z'), '2026-11-18@06:17');
+  assert.equal(slot('2026-11-18T12:00:00Z'), '2026-11-18@06:17');
+  assert.equal(slot('2026-11-18T20:59:00Z'), '2026-11-18@06:17');
+  assert.equal(slot('2026-11-18T21:00:00Z'), '2026-11-18@21:00');
+  assert.equal(slot('2026-11-19T01:00:00Z'), '2026-11-18@21:00');
+  assert.equal(slot('2026-07-18T20:00:00Z'), '2026-07-18@21:00');
+  assert.equal(slot('2026-07-18T05:17:00Z'), '2026-07-18@06:17');
+  const legacy = { successDate: '2026-11-18', completedAt: '2026-11-18T12:00:00Z' };
+  assert.equal(alreadyRefreshed(legacy, '2026-11-18@06:17'), true);
+  assert.equal(alreadyRefreshed(legacy, '2026-11-18@21:00'), false);
+  assert.equal(alreadyRefreshed({ successSlot: '2026-11-18@21:00' }, '2026-11-18@21:00'), true);
+  assert.equal(alreadyRefreshed({}, '2026-11-18@21:00'), false);
+});
 
 test('scheduled publisher commits only changed feed files and pushes without skipping deployment', async t => {
   const root = await mkdtemp(join(tmpdir(), 'fiesta-publish-'));

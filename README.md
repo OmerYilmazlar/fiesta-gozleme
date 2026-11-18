@@ -3,11 +3,11 @@
 Live site: https://omeryilmazlar.github.io/fiesta-gozleme/
 Repository: https://github.com/OmerYilmazlar/fiesta-gozleme
 
-GitHub Pages is live. Instagram redirects GitHub-hosted runners to a login page, while signed-out fetching has succeeded on this Windows computer. Daily refreshes now run locally; GitHub Actions only tests, builds and deploys pushed content. The saved feed survives any fetch failure.
+GitHub Pages is live. Instagram redirects GitHub-hosted runners to a login page, while signed-out fetching has succeeded on this Windows computer. Twice-daily refreshes now run locally; GitHub Actions only tests, builds and deploys pushed content. The saved feed survives any fetch failure.
 
-## Daily Windows task
+## Twice-daily Windows task
 
-Task name: **Fiesta Gozleme - Instagram refresh**. It runs at **06:17 local Windows time** (this computer uses the London time zone, including daylight saving) and catches up at sign-in or after a missed start. A success marker prevents more than one successful refresh per London calendar day. Failed runs can retry twice at 30-minute intervals.
+Task name: **Fiesta Gozleme - Instagram refresh**. It runs at **06:17 and 21:00 local Windows time** (this computer uses the London time zone, including daylight saving) and catches up at sign-in or after a missed start. A success marker prevents duplicate successful checks within each morning/evening slot. Missed checks catch up once for the most recent due slot. Failed runs can retry twice at 30-minute intervals.
 
 The computer must be on, online and signed into this Windows user account. A locked screen is fine; the task cannot run while the computer is off or the user is signed out. It does not wake the computer or store a Windows/Instagram password. Existing Git Credential Manager credentials authorize pushes. If Git authentication expires, reauthenticate interactively through your normal Git tooling; the task itself never prompts.
 
@@ -129,7 +129,7 @@ Long-lived Facebook User tokens generally last about **60 days**. Inspect the ac
 
 The repository is `OmerYilmazlar/fiesta-gozleme`, default branch `main`; Pages source is **GitHub Actions**. `.github/workflows/pages.yml` deploys pushes to the actual default branch and manual runs through **Actions ? Deploy Pages ? Run workflow**. It uses `npm ci --ignore-scripts`, runs the tests, builds `dist/`, and uploads/deploys the Pages artifact. Build has read-only repository access; the deployment job has only Pages and identity-token write permissions. No Instagram credentials are needed for deployment.
 
-There is no longer a GitHub cron job: the Windows task performs the daily fetch and pushes changes using your existing Git credentials. This avoids the confirmed GitHub-runner login redirect. The local task schedule is in `scripts/install-instagram-task.ps1`; edit its `06:17` trigger and rerun that installer to change the time.
+There is no longer a GitHub cron job: the Windows task performs the twice-daily fetch and pushes changes using your existing Git credentials. This avoids the confirmed GitHub-runner login redirect. The local task schedule is in `scripts/install-instagram-task.ps1`; edit its `06:17` and `21:00` triggers and rerun that installer to change the time.
 
 ### Maintenance and troubleshooting
 

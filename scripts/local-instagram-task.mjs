@@ -41,19 +41,35 @@ export function publishFeedChanges(repo, git = 'git') {
   return { changed: changed.length > 0, pushed: ahead > 0 };
 }
 
+// Identify the most recent scheduled check in London, including sign-in catch-up.
+export function refreshSlot(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type, p.value]));
+  const date = `${parts.year}-${parts.month}-${parts.day}`, minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  if (minutes >= 1260) return `${date}@21:00`;
+  if (minutes >= 377) return `${date}@06:17`;
+  const previousDate = new Date(Date.parse(`${date}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+  return `${previousDate}@21:00`;
+}
+
+export function alreadyRefreshed(state, slot) {
+  // Preserve the last success when upgrading the old once-daily state format.
+  const previous = state.successSlot || (state.completedAt ? refreshSlot(new Date(state.completedAt)) : null);
+  return previous === slot;
+}
+
 export async function runLocalTask({ force = false } = {}) {
   const stateDir = join(project, '.local-automation');
   const repo = join(stateDir, 'repo');
   const git = process.env.FIESTA_GIT || 'git';
   const npm = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const slot = refreshSlot();
   await mkdir(stateDir, { recursive: true });
   const lock = join(stateDir, 'running.lock');
   try { await mkdir(lock); } catch { throw new Error('Task is already running or a previous interrupted run left running.lock. Inspect before removing it.'); }
   try {
     let state = {};
     try { state = JSON.parse(await readFile(join(stateDir, 'status.json'), 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (!force && state.successDate === today) { console.log('Already refreshed successfully today; no duplicate fetch.'); return; }
+    if (!force && alreadyRefreshed(state, slot)) { console.log('Already refreshed successfully for this scheduled check; no duplicate fetch.'); return; }
     const run = args => command(git, args, repo, 'Git ' + args[0]);
     try { await access(join(repo, '.git')); }
     catch {
@@ -79,7 +95,7 @@ export async function runLocalTask({ force = false } = {}) {
     console.log(command(process.execPath, ['scripts/update-instagram.mjs'], repo, 'Instagram refresh'));
     command(process.execPath, ['scripts/build.mjs'], repo, 'Static site validation');
     const result = publishFeedChanges(repo, git);
-    const nextState = { successDate: today, completedAt: new Date().toISOString(), ...result };
+    const nextState = { successSlot: slot, completedAt: new Date().toISOString(), ...result };
     await writeFile(join(stateDir, 'status.next.json'), JSON.stringify(nextState, null, 2));
     await rename(join(stateDir, 'status.next.json'), join(stateDir, 'status.json'));
     console.log(result.pushed ? 'Feed committed and pushed; GitHub Pages deployment triggered.' : 'No feed changes; no new commit needed.');
