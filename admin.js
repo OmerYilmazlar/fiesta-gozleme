@@ -1,3 +1,4 @@
+import { createChangeTracker } from './form-changes.js';
 import { createAccountEditor } from './admin-accounts.js';
 import { createSectionEditor } from './admin-sections.js';
 import { supabaseUrl, supabaseKey } from './supabase-config.js';
@@ -5,7 +6,8 @@ import { days, validateMarket, londonClock } from './market-data.js';
 
 const $ = s => document.querySelector(s);
 const form = $('#editor');
-let token, current, locations = [], dirty = false;
+let token, current, locations = [];
+const marketChanges = createChangeTracker(form);
 const status = text => { $('#status').textContent = text; };
 async function api(path, options = {}) {
   const r = await fetch(`${supabaseUrl}${path}`, { ...options, headers: { apikey: supabaseKey, ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', Prefer: 'return=representation', ...options.headers }, signal: AbortSignal.timeout(15000) });
@@ -26,9 +28,9 @@ const contentEditor = createSectionEditor({ api, status });
 const accountEditor = createAccountEditor({ api, status, signOut: forceSignOut });
 function safeToClose() {
   if (contentEditor.isBusy() || accountEditor.isBusy()) { status('Please wait for publishing or uploading to finish.'); return false; }
-  return !(dirty || contentEditor.hasChanges() || accountEditor.hasChanges()) || confirm('Discard your unsaved changes?');
+  return !(marketChanges.hasChanges() || contentEditor.hasChanges() || accountEditor.hasChanges()) || confirm('Discard your unsaved changes?');
 }
-function clearEditor() { form.hidden = true; dirty = false; current = null; }
+function clearEditor() { form.hidden = true; marketChanges.clear(); current = null; }
 async function load() {
   locations = await api('/rest/v1/markets?select=*&order=sort_order.asc,name.asc');
   $('#locations').replaceChildren();
@@ -52,7 +54,7 @@ function addRow(r = { date: '', day: 'Monday', start: '11:30', end: '14:30' }) {
   const mode = () => { date.hidden = kind.value !== 'date'; date.required = !date.hidden; day.hidden = !date.hidden; };
   kind.onchange = mode; mode();
   row.querySelector('.start').value = r.start; row.querySelector('.end').value = r.end;
-  row.querySelector('button').onclick = () => { row.remove(); dirty = true; };
+  row.querySelector('button').onclick = () => { row.remove(); };
   $('#schedule').append(row);
 }
 function open(m = null) {
@@ -62,7 +64,7 @@ function open(m = null) {
   form.elements.published.checked = m?.published || false;
   form.elements.expiry.value = m?.expires_at ? londonClock(new Date(new Date(m.expires_at).getTime() - 1)).slice(0, 10) : '';
   for (const row of m?.schedule || []) addRow(row);
-  $('#delete').hidden = !m; form.hidden = false; dirty = false;
+  $('#delete').hidden = !m; form.hidden = false; marketChanges.markSaved();
   form.scrollIntoView({ behavior: 'smooth', block: 'start' }); form.elements.name.focus();
 }
 function expiryAfter(date) {
@@ -92,10 +94,8 @@ $('#logout').onclick = async () => {
 };
 $('#new').onclick = () => { if (safeToClose()) open(); };
 $('#cancel').onclick = () => { if (safeToClose()) clearEditor(); };
-$('#add-date').onclick = () => { addRow({ date: '', start: '11:30', end: '14:30' }); dirty = true; };
-form.oninput = () => { dirty = true; };
-form.onchange = () => { dirty = true; };
-window.addEventListener('beforeunload', e => { if (dirty || contentEditor.hasChanges() || accountEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
+$('#add-date').onclick = () => { addRow({ date: '', start: '11:30', end: '14:30' }); };
+window.addEventListener('beforeunload', e => { if (marketChanges.hasChanges() || contentEditor.hasChanges() || accountEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
 form.onsubmit = async event => {
   event.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
@@ -106,7 +106,7 @@ form.onsubmit = async event => {
     const filter = current ? `?id=eq.${current.id}&updated_at=eq.${encodeURIComponent(current.updated_at)}` : '';
     const result = await api(`/rest/v1/markets${filter}`, { method: current ? 'PATCH' : 'POST', body: JSON.stringify(m) });
     if (!result.length) throw Error('This location changed in another session. Copy your edits and reopen it before saving.');
-    dirty = false; current = result[0];
+    marketChanges.markSaved(); current = result[0];
     await load(); clearEditor(); status('Saved. Published changes appear on the website within a minute or on refresh.');
   } catch (e) { status(e.message); } finally { button.disabled = false; }
 };

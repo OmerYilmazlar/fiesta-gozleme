@@ -3,7 +3,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function createHandler({ url, serverKey, fetchImpl = fetch }) {
   return async request => {
     const origin = request.headers.get('Origin');
-    const allowed = ['https://omeryilmazlar.github.io', 'http://127.0.0.1:8000', 'http://localhost:8000'];
+    const allowed = ['https://fiestagozleme.com', 'https://www.fiestagozleme.com', 'https://omeryilmazlar.github.io', 'http://127.0.0.1:8000', 'http://localhost:8000'];
     const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', Vary: 'Origin',
       'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0],
       'Access-Control-Allow-Headers': 'authorization,apikey,content-type,prefer', 'Access-Control-Allow-Methods': 'POST,OPTIONS' };

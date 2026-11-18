@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHandler } from '../supabase/functions/manage-accounts/index.js';
+import { createChangeTracker } from '../form-changes.js';
+import { createAccountEditor } from '../admin-accounts.js';
+import { parseHTML } from 'linkedom';
+import { readFile } from 'node:fs/promises';
 const owner = 'b9168623-38f2-49a4-b835-6fe51ea0d098', other = '11111111-1111-4111-8111-111111111111', session = '22222222-2222-4222-8222-222222222222';
 const jwt = `header.${Buffer.from(JSON.stringify({ session_id: session })).toString('base64url')}.signature`;
 function setup({ manager = true, valid = true, reauth = true, limited = false, rejectUpdate = false } = {}) {
@@ -21,8 +25,59 @@ function setup({ manager = true, valid = true, reauth = true, limited = false, r
     return new Response(JSON.stringify(data), { status });
   } });
   const request = (body, auth = jwt, origin = 'https://omeryilmazlar.github.io') => handler(new Request('https://fixture/functions/v1/manage-accounts', { method: 'POST', headers: { ...(auth ? { Authorization: `Bearer ${auth}` } : {}), Origin: origin }, body: JSON.stringify(body) }));
-  return { calls, request };
+  return { calls, request, handler };
 }
+test('custom-domain CORS preflight and authenticated responses use the correct origin', async () => {
+  for (const origin of ['https://fiestagozleme.com', 'https://www.fiestagozleme.com', 'https://omeryilmazlar.github.io']) {
+    const { handler, calls, request } = setup();
+    const preflight = await handler(new Request('https://fixture/functions/v1/manage-accounts', { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'apikey,authorization,content-type,prefer' } }));
+    assert.equal(preflight.status, 204); assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+    assert.equal(calls.length, 0);
+    const response = await request({ action: 'list' }, jwt, origin);
+    assert.equal(response.status, 200); assert.equal(response.headers.get('access-control-allow-origin'), origin);
+  }
+  const { handler, calls } = setup();
+  assert.equal((await handler(new Request('https://fixture/functions/v1/manage-accounts', { method: 'OPTIONS', headers: { Origin: 'https://fiestagozleme.com.evil.example' } }))).status, 403);
+  assert.equal(calls.length, 0);
+});
+test('change tracking ignores hidden forms, current-password autofill, and unchanged/reverted fields', () => {
+  const { document } = parseHTML('<section><form hidden><input name="email" value="owner@example.com"><input name="currentPassword" type="password"><input name="password" type="password"></form></section>');
+  const form = document.querySelector('form'), email = form.querySelector('[name=email]');
+  const tracker = createChangeTracker(form, { exclude: ['currentPassword'] });
+  tracker.markSaved(); email.value = 'autofill@example.com';
+  assert.equal(tracker.hasChanges(), false);
+  form.hidden = false; email.value = 'owner@example.com'; tracker.markSaved();
+  form.querySelector('[name=currentPassword]').value = 'browser-autofilled';
+  assert.equal(tracker.hasChanges(), false);
+  email.value = 'new@example.com'; assert.equal(tracker.hasChanges(), true);
+  email.value = 'owner@example.com'; assert.equal(tracker.hasChanges(), false);
+  form.querySelector('[name=password]').value = 'new-password'; assert.equal(tracker.hasChanges(), true);
+  document.querySelector('section').hidden = true; assert.equal(tracker.hasChanges(), false);
+  tracker.clear(); document.querySelector('section').hidden = false; assert.equal(tracker.hasChanges(), false);
+});
+test('schedule row additions and checkbox edits are tracked and clear when reverted', () => {
+  const { document } = parseHTML('<form><input name="name" value="Market"><input name="published" type="checkbox"></form>');
+  const form = document.querySelector('form'), checkbox = form.querySelector('[type=checkbox]'); checkbox.checked = false;
+  const tracker = createChangeTracker(form); tracker.markSaved();
+  checkbox.checked = true; assert.equal(tracker.hasChanges(), true);
+  checkbox.checked = false; assert.equal(tracker.hasChanges(), false);
+  const row = document.createElement('input'); row.value = '12:00'; form.append(row);
+  assert.equal(tracker.hasChanges(), true); row.remove(); assert.equal(tracker.hasChanges(), false);
+});
+test('failed account loading followed by hidden password autofill has no unsaved changes', async () => {
+  const { document, window } = parseHTML(await readFile('admin.html', 'utf8'));
+  const prior = globalThis.document; globalThis.document = document;
+  try {
+    const form = document.querySelector('#account-form');
+    form.reset = () => { for (const n of form.querySelectorAll('input')) n.value = ''; };
+    const editor = createAccountEditor({ api: async () => { throw Error('Failed to fetch'); }, status() {}, signOut() {} });
+    await editor.load();
+    const password = form.querySelector('[name=currentPassword]'); password.value = 'autofilled';
+    password.dispatchEvent(new window.Event('input', { bubbles: true }));
+    assert.equal(form.hidden, true); assert.equal(editor.hasChanges(), false);
+    assert.equal(editor.isBusy(), false);
+  } finally { globalThis.document = prior; }
+});
 test('missing/invalid authentication and non-owner access never reach user administration', async () => {
   for (const options of [{}, { valid: false }, { manager: false }]) {
     const { calls, request } = setup(options);
