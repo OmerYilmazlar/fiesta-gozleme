@@ -6,6 +6,10 @@ create table fiesta_private.account_managers (user_id uuid primary key reference
 insert into fiesta_private.account_managers values ('b9168623-38f2-49a4-b835-6fe51ea0d098');
 create table fiesta_private.session_cutoffs (user_id uuid primary key references auth.users(id) on delete cascade, changed_at timestamptz not null);
 create table fiesta_private.account_attempts (user_id uuid primary key references auth.users(id) on delete cascade, window_start timestamptz not null, attempts integer not null);
+alter table fiesta_private.account_managers enable row level security;
+alter table fiesta_private.session_cutoffs enable row level security;
+alter table fiesta_private.account_attempts enable row level security;
+-- No client policies: only the trusted owner-executed functions access these tables.
 revoke all on all tables in schema fiesta_private from public, anon, authenticated;
 
 create function fiesta_private.valid_session(p_user uuid, p_session uuid) returns boolean
