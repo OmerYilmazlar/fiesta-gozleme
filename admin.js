@@ -9,6 +9,14 @@ const form = $('#editor');
 let token, current, locations = [];
 const marketChanges = createChangeTracker(form);
 const status = text => { $('#status').textContent = text; };
+function setPasswordVisible(visible) {
+  $('#login-password').type = visible ? 'text' : 'password';
+  const label = visible ? 'Hide password' : 'Show password';
+  $('#toggle-password').setAttribute('aria-label', label);
+  $('#toggle-password').title = label;
+  $('#toggle-password .eye-slash').toggleAttribute('hidden', !visible);
+}
+$('#toggle-password').onclick = () => setPasswordVisible($('#login-password').type === 'password');
 async function api(path, options = {}) {
   const r = await fetch(`${supabaseUrl}${path}`, { ...options, headers: { apikey: supabaseKey, ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', Prefer: 'return=representation', ...options.headers }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) {
@@ -74,7 +82,7 @@ function expiryAfter(date) {
   return new Date(guess.getTime() - offset).toISOString();
 }
 $('#login').onsubmit = async event => {
-  event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true; status('Signing in…');
+  event.preventDefault(); const button = event.target.querySelector('button[type="submit"]'); button.disabled = true; setPasswordVisible(false); status('Signing in…');
   try {
     const result = await api('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: event.target.elements.email.value.trim(), password: event.target.elements.password.value }) });
     token = result.access_token; event.target.elements.password.value = '';
