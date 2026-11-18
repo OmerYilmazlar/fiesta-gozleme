@@ -6,9 +6,51 @@ import { sections, extractContent, validateContent, applyContent, safeLink, safe
 import { supabaseUrl } from '../supabase-config.js';
 import { StagedImages } from '../staged-images.js';
 import { createSectionEditor } from '../admin-sections.js';
+import { createLayoutEditor } from '../admin-layout.js';
+import { defaultOrder, validateOrder, applyOrder } from '../site-layout.js';
 import { cleanupImages, sweepImages, imagePrefix } from '../image-storage.js';
 const html = await readFile('index.html', 'utf8');
 const defaults = JSON.parse(await readFile('data/site-content.json', 'utf8'));
+
+test('layouts move existing sections without losing content or controls and reject fixed/duplicate entries', () => {
+  const { document } = parseHTML(html), market = document.querySelector('#markets'), hero = document.querySelector('.hero');
+  const reordered = [...defaultOrder].reverse();
+  applyOrder(document, reordered);
+  assert.deepEqual([...document.querySelector('#main').children].filter(n => defaultOrder.includes(n.id)).map(n => n.id), reordered);
+  assert.equal(document.querySelector('#markets'), market); assert.equal(document.querySelector('#main').firstElementChild, hero);
+  assert.ok(document.querySelector('#menu .sides')); assert.equal(document.querySelectorAll('#instagram-posts').length, 1);
+  for (const invalid of [null, ['header', ...defaultOrder.slice(1)], ['menu', ...defaultOrder.slice(0, -1)], defaultOrder.slice(1)]) {
+    assert.throws(() => validateOrder(invalid)); assert.throws(() => applyOrder(document, invalid));
+  }
+  applyOrder(document, defaultOrder); assert.equal(document.querySelector('#menu').nextElementSibling, market);
+});
+
+test('layout panel previews, publishes, reloads, resets and handles conflicts without losing edits', async () => {
+  const { document } = parseHTML(await readFile('admin.html', 'utf8'));
+  const prior = globalThis.document; globalThis.document = document;
+  let row = { id: 'layout', content: { order: [...defaultOrder] }, updated_at: '2026-11-18T00:00:00Z' };
+  let message, lastOrder, conflict = false, calls = 0;
+  try {
+    document.querySelector('#workspace').hidden = false; document.querySelector('#content-workspace').hidden = false;
+    const editor = createLayoutEditor({ status: text => { message = text; }, onBusy() {}, onChange: order => { lastOrder = order; }, api: async (path, options) => {
+      assert.match(path, /id=eq.layout&updated_at=eq./); calls++;
+      if (conflict) return [];
+      row = { ...row, content: JSON.parse(options.body).content, updated_at: '2026-11-18T01:00:00Z' }; return [row];
+    } });
+    editor.load([row]); assert.equal(editor.hasChanges(), false);
+    assert.equal(document.querySelector('#layout-list button').disabled, true);
+    const down = () => document.querySelector('#layout-list button[data-section="menu"][data-direction="1"]').click();
+    down(); assert.equal(editor.hasChanges(), true); assert.equal(lastOrder[0], 'markets'); assert.equal(calls, 0);
+    document.querySelector('#layout-discard').click(); assert.equal(editor.hasChanges(), false);
+    down(); await document.querySelector('#layout-form').onsubmit({ preventDefault() {} });
+    assert.match(message, /published/); assert.equal(editor.hasChanges(), false);
+    editor.clear(); editor.load([row]); assert.equal(editor.getOrder()[0], 'markets');
+    document.querySelector('#layout-reset').click(); assert.equal(editor.hasChanges(), true); assert.deepEqual(lastOrder, defaultOrder);
+    conflict = true; await document.querySelector('#layout-form').onsubmit({ preventDefault() {} });
+    assert.match(message, /Another editor/); assert.equal(editor.hasChanges(), true); assert.equal(editor.isBusy(), false);
+    document.querySelector('#layout-discard').click(); assert.equal(editor.hasChanges(), false); assert.equal(editor.getOrder()[0], 'markets');
+  } finally { globalThis.document = prior; }
+});
 
 test('gift card editor loads, previews, publishes, reopens and preserves unsaved edits on conflicts', async () => {
   const { document, window } = parseHTML(await readFile('admin.html', 'utf8'));
@@ -55,6 +97,12 @@ test('gift card editor loads, previews, publishes, reopens and preserves unsaved
     assert.equal(editor.hasChanges(), false);
     assert.equal(document.querySelector('#section-title').textContent, 'Gift cards');
     frame.dispatchEvent(new window.Event('load'));
+    document.querySelector('#layout-list button[data-section="menu"][data-direction="1"]').click();
+    assert.equal(editor.hasChanges(), true);
+    assert.equal(previewDoc.querySelector('#markets').nextElementSibling.id, 'menu');
+    const movableOptions = [...picker.options].map(n => n.value).filter(id => defaultOrder.includes(id));
+    assert.equal(movableOptions[0], 'markets');
+    document.querySelector('#layout-discard').click(); assert.equal(editor.hasChanges(), false);
     const form = document.querySelector('#section-form');
     const amount = form.querySelector('[data-content-field="amount1"]');
     assert.equal(amount.value, '£20'); amount.value = '£25'; form.oninput();

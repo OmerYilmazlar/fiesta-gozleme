@@ -89,3 +89,5 @@
 
 /* An optional uploaded photo replaces only the artwork; the GitHub design stays available. */
 .giftcards-photo{display:block;width:100%;height:auto;max-height:650px;object-fit:contain;border-radius:18px}.giftcards-photo:not([src]){display:none}.giftcards-display:has(.giftcards-photo[src]) .giftcards-stack{display:none}
+
+.announcement>a{font-size:14px;line-height:1.4;letter-spacing:.5px}@media(max-width:650px){.announcement>a{font-size:12px}}

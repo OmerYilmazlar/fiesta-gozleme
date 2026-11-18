@@ -3,6 +3,8 @@ import { cleanupImages, sweepImages } from './image-storage.js';
 import { StagedImages, prepareImage } from './staged-images.js';
 import { sections, validateContent, applyContent } from './section-content.js';
 import { supabaseUrl } from './supabase-config.js';
+import { applyOrder } from './site-layout.js';
+import { createLayoutEditor } from './admin-layout.js';
 
 export function createSectionEditor({ api, status }) {
   const $ = s => document.querySelector(s), form = $('#section-form'), picker = $('#section-picker');
@@ -12,12 +14,21 @@ export function createSectionEditor({ api, status }) {
   let lastSweep = 0;
   const values = () => Object.fromEntries([...form.querySelectorAll('[data-content-field]')].map(n => [n.dataset.contentField, n.value]));
   const changes = createChangeTracker(form, { read: values });
-  const hasChanges = () => !form.closest('[hidden]') && (changes.hasChanges() || staged.items.size > 0);
+  const hasSectionChanges = () => !form.closest('[hidden]') && (changes.hasChanges() || staged.items.size > 0);
+  const layout = createLayoutEditor({ api, status, onBusy: setBusy, onChange: order => {
+    const selected = picker.value;
+    const ids = ['header', 'hero', 'highlights', ...order.flatMap(id => id === 'menu' ? ['menu', 'sides'] : [id]), 'footer'];
+    for (const id of ids) { const option = [...picker.options].find(o => o.value === id); if (option) picker.append(option); }
+    picker.value = selected;
+    if (previewReady) applyOrder($('#section-preview').contentDocument, order);
+  } });
+  const hasChanges = () => hasSectionChanges() || layout.hasChanges();
   for (const s of sections) { const option = document.createElement('option'); option.value = s.id; option.textContent = s.label; picker.append(option); }
   const section = () => sections.find(s => s.id === picker.value);
   function preview() {
     if (!previewReady || !current) return;
     const doc = $('#section-preview').contentDocument;
+    applyOrder(doc, layout.getOrder());
     try { applyContent(doc, section(), values()); } catch { return; }
     for (const f of section().fields.filter(f => f.type === 'image')) {
       const pending = staged.get(f.id);
@@ -39,6 +50,7 @@ export function createSectionEditor({ api, status }) {
   }
   function setBusy(value) {
     busy = value; picker.disabled = value;
+    layout.setDisabled(value);
     for (const n of form.querySelectorAll('input,textarea,button')) n.disabled = value;
   }
   function render() {
@@ -80,13 +92,13 @@ export function createSectionEditor({ api, status }) {
   }
   picker.onchange = () => {
     const next = picker.value;
-    if (hasChanges() && !confirm('Discard your unsaved section changes?')) { picker.value = current.id; return; }
+    if (hasSectionChanges() && !confirm('Discard your unsaved section changes?')) { picker.value = current.id; return; }
     picker.value = next;
     try { render(); } catch (e) { status(e.message); }
   };
   form.oninput = () => { preview(); };
   $('#preview-size').onchange = e => { $('#section-preview').style.width = e.target.value === 'mobile' ? '375px' : '100%'; };
-  $('#section-revert').onclick = () => { if (!hasChanges() || confirm('Discard your unsaved section changes?')) render(); };
+  $('#section-revert').onclick = () => { if (!hasSectionChanges() || confirm('Discard your unsaved section changes?')) render(); };
   form.onsubmit = async e => {
     e.preventDefault(); if (busy) return;
     setBusy(true);
@@ -118,12 +130,13 @@ export function createSectionEditor({ api, status }) {
   return {
     hasChanges,
     isBusy: () => busy,
-    clear() { staged.clear(); changes.clear(); current = null; rows = []; form.hidden = true; $('#section-fields').replaceChildren(); $('#section-preview').src = 'about:blank'; },
+    clear() { staged.clear(); changes.clear(); layout.clear(); previewReady = false; current = null; rows = []; form.hidden = true; $('#section-fields').replaceChildren(); $('#section-preview').src = 'about:blank'; },
     async load() {
       form.hidden = true; setBusy(true); status('Loading website sections…');
       try {
         if (!defaults) { const r = await fetch('./data/site-content.json'); if (!r.ok) throw Error('Could not load the original website content.'); defaults = await r.json(); }
         rows = await api('/rest/v1/site_sections?select=id,content,updated_at');
+        layout.load(rows);
         picker.value = 'hero'; render();
         const cleanup = await sweepImages(api, sections.map(s => s.id)); lastSweep = Date.now();
         status('Choose a section, edit its content, then publish when ready.' + (cleanup.failed ? cleanupWarning : ''));
