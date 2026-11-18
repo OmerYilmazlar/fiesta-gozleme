@@ -23,6 +23,12 @@ export const sections = [
     ...[1, 2, 3, 4, 5, 6].map(n => field(`filling${n}`, `Filling ${n}`, `.ingredients > span:nth-child(${n})`)),
     field('side_tag', 'Sides small heading', '.sides > div:first-child .eyebrow'), field('side_heading', 'Sides heading', '.sides h3'), field('side_text', 'Sides list', '.sides > div:first-child p', 'multiline'), field('drink_tag', 'Drinks small heading', '.sides > div:last-child .eyebrow'),
     ...[1, 2].flatMap(n => [field(`drink${n}`, `Drink ${n}`, `.sides .drink:nth-of-type(${n})`, 'label'), field(`price${n}`, `Drink ${n}: price`, `.sides .drink:nth-of-type(${n}) strong`)])] },
+  { id: 'giftcards', label: 'Gift cards', target: '#giftcards', fields: [
+    field('eyebrow', 'Small heading', '#giftcards .eyebrow'), field('heading', 'Heading', '#giftcards h2', 'heading'),
+    field('intro', 'Introduction', '.giftcards-intro', 'multiline'), field('note', 'How to order', '.giftcards-note', 'multiline'),
+    ...link('button', 'Gift card enquiry button', '#giftcards .button'), field('badge', 'Availability badge', '.giftcards-badge'),
+    field('brand', 'Name on all cards', '.gift-card-brand'), field('card_label', 'Label on all cards', '.gift-card-label'),
+    ...[1, 2, 3].map(n => field(`amount${n}`, `Card ${n}: amount`, `.gift-card:nth-child(${n}) strong`))] },
   { id: 'instagram', label: 'Instagram section heading', target: '#instagram', fields: [field('eyebrow', 'Small heading', '#instagram .eyebrow'), field('heading', 'Heading', '#instagram-title', 'heading'), ...link('follow', 'Follow button', '.instagram-follow a')] },
   { id: 'story', label: 'Our story', target: '#story', fields: [field('eyebrow', 'Small heading', '.story-content .eyebrow'), field('heading', 'Heading', '.story-content h2', 'heading'), ...[1, 2].map(n => field(`paragraph${n}`, `Paragraph ${n}`, `.story-content > p:not(.eyebrow):nth-of-type(${n + 1})`, 'multiline')), ...link('button', 'Story button', '.story-content > a'), ...photo('story', 'Story image', '.story-art img'), field('caption', 'Image caption', '.story-art figcaption')] },
   { id: 'markets', label: 'Markets introduction', target: '#markets', fields: [...intro('#markets'), field('notice', 'Travel notice', '.market-meta > p:last-child', 'multiline')] },

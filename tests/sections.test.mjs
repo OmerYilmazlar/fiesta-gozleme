@@ -5,9 +5,65 @@ import { parseHTML } from 'linkedom';
 import { sections, extractContent, validateContent, applyContent, safeLink, safeImage } from '../section-content.js';
 import { supabaseUrl } from '../supabase-config.js';
 import { StagedImages } from '../staged-images.js';
+import { createSectionEditor } from '../admin-sections.js';
 import { cleanupImages, sweepImages, imagePrefix } from '../image-storage.js';
 const html = await readFile('index.html', 'utf8');
 const defaults = JSON.parse(await readFile('data/site-content.json', 'utf8'));
+
+test('gift card editor loads, previews, publishes, reopens and preserves unsaved edits on conflicts', async () => {
+  const { document, window } = parseHTML(await readFile('admin.html', 'utf8'));
+  const globals = { document: globalThis.document, fetch: globalThis.fetch, setInterval: globalThis.setInterval, confirm: globalThis.confirm };
+  const previewDoc = parseHTML(html).document;
+  let message = '', conflict = false, patches = 0;
+  let rows = sections.map(s => ({ id: s.id, content: {}, updated_at: '2026-11-18T00:00:00Z' }));
+  try {
+    globalThis.document = document;
+    globalThis.fetch = async () => ({ ok: true, json: async () => defaults });
+    globalThis.setInterval = () => 0;
+    globalThis.confirm = () => true;
+    document.querySelector('#workspace').hidden = false;
+    document.querySelector('#content-workspace').hidden = false;
+    const picker = document.querySelector('#section-picker');
+    // Linkedom does not implement the browser's select.value setter.
+    Object.defineProperty(picker, 'value', { writable: true, value: 'hero' });
+    const frame = document.querySelector('#section-preview');
+    Object.defineProperty(frame, 'contentDocument', { value: previewDoc });
+    Object.defineProperty(frame, 'contentWindow', { value: { scrollY: 0, scrollTo() {} } });
+    previewDoc.querySelector('#giftcards').getBoundingClientRect = () => ({ top: 0 });
+    const editor = createSectionEditor({ status: value => { message = value; }, api: async (path, options = {}) => {
+      if (options.method === 'PATCH') {
+        assert.match(path, /id=eq.giftcards&updated_at=eq./); patches++;
+        if (conflict) return [];
+        const row = { id: 'giftcards', content: JSON.parse(options.body).content, updated_at: '2026-11-18T01:00:00Z' };
+        rows = rows.map(r => r.id === row.id ? row : r); return [row];
+      }
+      if (path.includes('/list/')) return [];
+      if (path.startsWith('/rest/')) return rows;
+      throw Error('Unexpected API call: ' + path);
+    } });
+    await editor.load(); picker.value = 'giftcards'; picker.onchange();
+    assert.equal(editor.hasChanges(), false);
+    assert.equal(document.querySelector('#section-title').textContent, 'Gift cards');
+    frame.dispatchEvent(new window.Event('load'));
+    const form = document.querySelector('#section-form');
+    const amount = form.querySelector('[data-content-field="amount1"]');
+    assert.equal(amount.value, '£20'); amount.value = '£25'; form.oninput();
+    assert.equal(editor.hasChanges(), true);
+    assert.equal(previewDoc.querySelector('.gift-card-one strong').textContent, '£25');
+    amount.value = '£20'; assert.equal(editor.hasChanges(), false); amount.value = '£25';
+    await form.onsubmit({ preventDefault() {} });
+    assert.match(message, /^Published/); assert.equal(editor.hasChanges(), false);
+    assert.equal(rows.find(r => r.id === 'giftcards').content.amount1, '£25');
+    picker.value = 'hero'; picker.onchange(); picker.value = 'giftcards'; picker.onchange();
+    const savedAmount = form.querySelector('[data-content-field="amount1"]');
+    assert.equal(savedAmount.value, '£25'); savedAmount.value = '£30'; conflict = true;
+    await form.onsubmit({ preventDefault() {} });
+    assert.match(message, /Another editor/); assert.equal(editor.hasChanges(), true); assert.equal(editor.isBusy(), false);
+    const destination = form.querySelector('[data-content-field="button_link"]'); destination.value = 'javascript:alert(1)';
+    await form.onsubmit({ preventDefault() {} }); assert.equal(patches, 2); assert.match(message, /https/);
+    document.querySelector('#section-revert').onclick(); assert.equal(editor.hasChanges(), false);
+  } finally { Object.assign(globalThis, globals); }
+});
 test('trying, replacing and discarding images only manages browser memory', () => {
   const revoked = []; let count = 0;
   const staged = new StagedImages({ createObjectURL: () => `blob:preview-${++count}`, revokeObjectURL: url => revoked.push(url) });
@@ -47,9 +103,9 @@ test('orphan sweep waits an hour, handles pagination and rechecks references', a
   assert.ok(!removed.includes('hero/active.webp')); assert.ok(!removed.includes('hero/recent.webp'));
   assert.ok(removed.includes('hero/last.webp'));
 });
-test('all eleven sections have valid targets and defaults matching the site', () => {
+test('all twelve sections have valid targets and defaults matching the site', () => {
   const { document } = parseHTML(html);
-  assert.equal(sections.length, 11);
+  assert.equal(sections.length, 12);
   for (const s of sections) {
     assert.deepEqual(defaults[s.id], extractContent(document, s));
     validateContent(s, defaults[s.id]);

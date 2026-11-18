@@ -155,5 +155,19 @@
     "mobile_menu_link": "#menu",
     "mobile_markets_text": "Find us →",
     "mobile_markets_link": "#markets"
+  },
+  "giftcards": {
+    "eyebrow": "A LITTLE FIESTA. A LOVELY GIFT.",
+    "heading": "The perfect gift,\nevery time.",
+    "intro": "Give someone their next favourite lunch. Choose a Fiesta eGift card and share a little happiness, fresh off the griddle.",
+    "note": "Email us to arrange your gift card.",
+    "button_text": "Enquire about gift cards",
+    "button_link": "mailto:fiestagozleme@gmail.com?subject=Fiesta%20gift%20card%20enquiry",
+    "badge": "eGift available now",
+    "brand": "Fiesta Gözleme",
+    "card_label": "Giftcard",
+    "amount1": "£20",
+    "amount2": "£50",
+    "amount3": "£100"
   }
 }
