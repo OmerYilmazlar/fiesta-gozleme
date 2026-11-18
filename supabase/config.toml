@@ -1,0 +1,4 @@
+[functions.manage-accounts]
+# The handler validates the bearer token against Supabase Auth before every action.
+verify_jwt = false
+entrypoint = "./functions/manage-accounts/index.js"

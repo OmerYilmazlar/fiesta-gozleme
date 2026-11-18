@@ -8,3 +8,5 @@ dist/
 index.original.html
 graphify-out/
 .local-automation/
+supabase/.temp/
+supabase/.branches/

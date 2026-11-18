@@ -1,3 +1,4 @@
+import { createAccountEditor } from './admin-accounts.js';
 import { createSectionEditor } from './admin-sections.js';
 import { supabaseUrl, supabaseKey } from './supabase-config.js';
 import { days, validateMarket, londonClock } from './market-data.js';
@@ -9,7 +10,12 @@ const status = text => { $('#status').textContent = text; };
 async function api(path, options = {}) {
   const r = await fetch(`${supabaseUrl}${path}`, { ...options, headers: { apikey: supabaseKey, ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', Prefer: 'return=representation', ...options.headers }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) {
-    if (r.status === 401) throw Error('Your session has expired. Copy any unsaved changes, then sign out and sign in again.');
+    if (path.startsWith('/functions/v1/manage-accounts')) {
+      const payload = await r.json().catch(() => ({}));
+      const error = new Error(r.status === 404 ? 'User accounts needs server setup. Deploy the manage-accounts function in Supabase.' : payload.error || 'Account request failed. Please try again.');
+      error.signInAgain = payload.signInAgain === true; throw error;
+    }
+    if (r.status === 401) { const error = new Error('Your session has expired. Sign in again.'); error.httpStatus = 401; throw error; }
     if (r.status === 404 || r.status === 400 && path.startsWith('/storage/')) throw Error('This feature needs database setup. For website sections and image uploads, run 003-site-sections.sql in Supabase.');
     throw Error('Request failed. Check your connection, account permissions and database setup, then try again.');
   }
@@ -17,9 +23,10 @@ async function api(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 const contentEditor = createSectionEditor({ api, status });
+const accountEditor = createAccountEditor({ api, status, signOut: forceSignOut });
 function safeToClose() {
-  if (contentEditor.isBusy()) { status('Please wait for publishing or uploading to finish.'); return false; }
-  return !(dirty || contentEditor.hasChanges()) || confirm('Discard your unsaved changes?');
+  if (contentEditor.isBusy() || accountEditor.isBusy()) { status('Please wait for publishing or uploading to finish.'); return false; }
+  return !(dirty || contentEditor.hasChanges() || accountEditor.hasChanges()) || confirm('Discard your unsaved changes?');
 }
 function clearEditor() { form.hidden = true; dirty = false; current = null; }
 async function load() {
@@ -71,20 +78,24 @@ $('#login').onsubmit = async event => {
     token = result.access_token; event.target.elements.password.value = '';
     const approved = await api(`/rest/v1/market_editors?select=user_id&user_id=eq.${encodeURIComponent(result.user.id)}`);
     if (!approved.length) { token = null; throw Error('This account has not been approved as a Fiesta editor. Ask the project owner to add it.'); }
-    await load(); $('#market-workspace').hidden = false; $('#content-workspace').hidden = true; $('#show-markets').setAttribute('aria-pressed', 'true'); $('#show-content').setAttribute('aria-pressed', 'false'); $('#login').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; status('Signed in. Select a location or add a new one.');
+    await load();
+    $('#show-accounts').hidden = true;
+    try { $('#show-accounts').hidden = await api('/rest/v1/rpc/fiesta_can_manage_accounts', { method: 'POST', body: '{}' }) !== true; } catch { /* Existing editing works before account setup. */ }
+    $('#account-workspace').hidden = true; $('#show-accounts').setAttribute('aria-pressed', 'false');
+    $('#market-workspace').hidden = false; $('#content-workspace').hidden = true; $('#show-markets').setAttribute('aria-pressed', 'true'); $('#show-content').setAttribute('aria-pressed', 'false'); $('#login').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; status('Signed in. Select a location or add a new one.');
   } catch (e) { token = null; status(e.message); } finally { button.disabled = false; }
 };
 $('#logout').onclick = async () => {
   if (!safeToClose()) return;
   try { await api('/auth/v1/logout', { method: 'POST' }); } catch { /* Clear local access even if offline. */ }
-  token = null; locations = []; contentEditor.clear(); clearEditor(); $('#locations').replaceChildren(); $('#workspace').hidden = true; $('#logout').hidden = true; $('#login').hidden = false; status('Signed out.');
+  forceSignOut('Signed out.');
 };
 $('#new').onclick = () => { if (safeToClose()) open(); };
 $('#cancel').onclick = () => { if (safeToClose()) clearEditor(); };
 $('#add-date').onclick = () => { addRow({ date: '', start: '11:30', end: '14:30' }); dirty = true; };
 form.oninput = () => { dirty = true; };
 form.onchange = () => { dirty = true; };
-window.addEventListener('beforeunload', e => { if (dirty || contentEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (dirty || contentEditor.hasChanges() || accountEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
 form.onsubmit = async event => {
   event.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
@@ -109,12 +120,33 @@ $('#delete').onclick = async () => {
   } catch (e) { status(e.message); } finally { button.disabled = false; }
 };
 
-async function changeArea(content) {
-  if (!safeToClose()) return;
-  clearEditor(); contentEditor.clear();
-  $('#market-workspace').hidden = content; $('#content-workspace').hidden = !content;
-  $('#show-markets').setAttribute('aria-pressed', String(!content)); $('#show-content').setAttribute('aria-pressed', String(content));
-  if (content) await contentEditor.load(); else status('Select a location or add a new one.');
+function forceSignOut(message) {
+  token = null; locations = []; contentEditor.clear(); accountEditor.clear(); clearEditor();
+  $('#locations').replaceChildren(); $('#workspace').hidden = true; $('#logout').hidden = true; $('#login').hidden = false;
+  $('#show-accounts').hidden = true; $('#login').elements.password.value = ''; status(message);
 }
-$('#show-markets').onclick = () => changeArea(false);
-$('#show-content').onclick = () => changeArea(true);
+async function changeArea(area) {
+  if (!safeToClose()) return;
+  clearEditor(); contentEditor.clear(); accountEditor.clear();
+  $('#market-workspace').hidden = area !== 'markets'; $('#content-workspace').hidden = area !== 'content'; $('#account-workspace').hidden = area !== 'accounts';
+  for (const name of ['markets','content','accounts']) $('#show-' + name).setAttribute('aria-pressed', String(area === name));
+  if (area === 'content') await contentEditor.load();
+  else if (area === 'accounts') await accountEditor.load();
+  else status('Select a location or add a new one.');
+}
+$('#show-markets').onclick = () => changeArea('markets');
+$('#show-content').onclick = () => changeArea('content');
+$('#show-accounts').onclick = () => changeArea('accounts');
+async function checkSession() {
+  if (!token || document.hidden) return;
+  const checkedToken = token;
+  try {
+    const valid = await api('/rest/v1/rpc/fiesta_session_valid', { method: 'POST', body: '{}' });
+    if (token === checkedToken && valid === false) forceSignOut('Your account or session changed. Sign in again to continue.');
+  } catch (error) {
+    if (token === checkedToken && error.httpStatus === 401) forceSignOut('Your session has ended. Sign in again to continue.');
+    // Network failure or an unapplied migration does not discard unsaved work. RLS still guards writes.
+  }
+}
+setInterval(checkSession, 30000);
+document.addEventListener('visibilitychange', checkSession);
