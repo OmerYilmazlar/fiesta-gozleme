@@ -9,6 +9,9 @@ $runner = Join-Path $PSScriptRoot 'run-instagram-task.ps1'
 $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "' + $runner + '"') -WorkingDirectory $projectRoot
 $daily = New-ScheduledTaskTrigger -Daily -At '06:17'
 $evening = New-ScheduledTaskTrigger -Daily -At '21:00'
+# Floating local times follow Windows daylight saving instead of a fixed UTC offset.
+$daily.StartBoundary = $daily.StartBoundary.Substring(0, 19)
+$evening.StartBoundary = $evening.StartBoundary.Substring(0, 19)
 $logon = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 30)
 $principal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive -RunLevel Limited
