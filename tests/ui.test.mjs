@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { parseHTML } from 'linkedom';
+import { sections } from '../section-content.js';
 import { validateFeed, renderFeed, initInstagram } from '../instagram-feed.js';
 
 const html = await readFile('index.html', 'utf8');
@@ -26,9 +27,11 @@ function setup() {
   return { document, window, section, track, scrolls };
 }
 
-test('news is immediately above story and preserves original sections, links and navigation', () => {
+test('page and editor follow menu, locations, gift cards, story, Instagram order', () => {
   const { document } = setup();
-  assert.equal(document.querySelector('#instagram').nextElementSibling.id, 'story');
+  const order = ['menu', 'markets', 'giftcards', 'story', 'instagram'];
+  for (let i = 0; i < order.length - 1; i++) assert.equal(document.getElementById(order[i]).nextElementSibling.id, order[i + 1]);
+  assert.deepEqual(sections.filter(s => order.includes(s.id)).map(s => s.id), order);
   assert.equal(document.querySelector('.instagram-follow a').getAttribute('href'), 'https://www.instagram.com/fiestagozleme/');
   for (const id of ['menu', 'story', 'markets', 'gallery', 'contact', 'navigation']) assert.ok(document.getElementById(id));
   assert.equal(document.querySelectorAll('.market-card').length, 10);
