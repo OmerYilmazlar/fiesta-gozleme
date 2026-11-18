@@ -4,7 +4,7 @@ This feature changes Supabase Auth users through an Edge Function. The website n
 
 Deployment status (18 November 2026): `manage-accounts` is already deployed to the Fiesta project and rejects unauthenticated requests. The database migration still needs to be run in the SQL Editor. Steps 2–4 below are retained for future redeployment; they do not need repeating now.
 
-1. Run `005-account-management.sql` once in this project's SQL Editor. It grants account-management permission only to the existing owner UID `b9168623-38f2-49a4-b835-6fe51ea0d098`. Other editors cannot list accounts or change credentials. Do not use this migration with a different project/owner without updating that explicit UID first.
+1. Run `005-account-management.sql` (safe to rerun if setup was already started) in this project's SQL Editor. It grants account-management permission only to the existing owner UID `b9168623-38f2-49a4-b835-6fe51ea0d098`. Other editors cannot list accounts or change credentials. Do not use this migration with a different project/owner without updating that explicit UID first.
 2. In Supabase → Edge Functions, create a function named **manage-accounts**. Copy the entire contents of `functions/manage-accounts/index.js` into its entry file (the dashboard may name that file `index.ts`; the JavaScript is valid there). Deploy it.
 3. Set this function's **Verify JWT with legacy secret** option off. The function itself verifies every bearer token with Supabase Auth, checks the owner permission and current session, and rejects anonymous/non-owner calls. Disabling that legacy gateway check does not make this handler public. CLI deployment uses the supplied `config.toml`:
 
