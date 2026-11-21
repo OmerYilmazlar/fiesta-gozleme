@@ -1,5 +1,6 @@
 import { createChangeTracker } from './form-changes.js';
 import { createAccountEditor } from './admin-accounts.js';
+import { createProfileEditor } from './admin-profile.js';
 import { createSectionEditor } from './admin-sections.js';
 import { supabaseUrl, supabaseKey } from './supabase-config.js';
 import { days, validateMarket, londonClock } from './market-data.js';
@@ -34,9 +35,10 @@ async function api(path, options = {}) {
 }
 const contentEditor = createSectionEditor({ api, status });
 const accountEditor = createAccountEditor({ api, status, signOut: forceSignOut });
+const profileEditor = createProfileEditor({ api, status, signOut: forceSignOut });
 function safeToClose() {
-  if (contentEditor.isBusy() || accountEditor.isBusy()) { status('Please wait for publishing or uploading to finish.'); return false; }
-  return !(marketChanges.hasChanges() || contentEditor.hasChanges() || accountEditor.hasChanges()) || confirm('Discard your unsaved changes?');
+  if (contentEditor.isBusy() || accountEditor.isBusy() || profileEditor.isBusy()) { status('Please wait for saving or uploading to finish.'); return false; }
+  return !(marketChanges.hasChanges() || contentEditor.hasChanges() || accountEditor.hasChanges() || profileEditor.hasChanges()) || confirm('Discard your unsaved changes?');
 }
 function clearEditor() { form.hidden = true; marketChanges.clear(); current = null; }
 async function load() {
@@ -92,6 +94,7 @@ $('#login').onsubmit = async event => {
     $('#show-accounts').hidden = true;
     try { $('#show-accounts').hidden = await api('/rest/v1/rpc/fiesta_can_manage_accounts', { method: 'POST', body: '{}' }) !== true; } catch { /* Existing editing works before account setup. */ }
     $('#account-workspace').hidden = true; $('#show-accounts').setAttribute('aria-pressed', 'false');
+    $('#profile-workspace').hidden = true; $('#show-profile').setAttribute('aria-pressed', 'false');
     $('#market-workspace').hidden = false; $('#content-workspace').hidden = true; $('#show-markets').setAttribute('aria-pressed', 'true'); $('#show-content').setAttribute('aria-pressed', 'false'); $('#login').hidden = true; $('#workspace').hidden = false; $('#logout').hidden = false; status('Signed in. Select a location or add a new one.');
   } catch (e) { token = null; status(e.message); } finally { button.disabled = false; }
 };
@@ -103,7 +106,7 @@ $('#logout').onclick = async () => {
 $('#new').onclick = () => { if (safeToClose()) open(); };
 $('#cancel').onclick = () => { if (safeToClose()) clearEditor(); };
 $('#add-date').onclick = () => { addRow({ date: '', start: '11:30', end: '14:30' }); };
-window.addEventListener('beforeunload', e => { if (marketChanges.hasChanges() || contentEditor.hasChanges() || accountEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (marketChanges.hasChanges() || contentEditor.hasChanges() || accountEditor.hasChanges() || profileEditor.hasChanges()) { e.preventDefault(); e.returnValue = ''; } });
 form.onsubmit = async event => {
   event.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
@@ -129,22 +132,25 @@ $('#delete').onclick = async () => {
 };
 
 function forceSignOut(message) {
-  token = null; locations = []; contentEditor.clear(); accountEditor.clear(); clearEditor();
+  token = null; locations = []; contentEditor.clear(); accountEditor.clear(); profileEditor.clear(); clearEditor();
   $('#locations').replaceChildren(); $('#workspace').hidden = true; $('#logout').hidden = true; $('#login').hidden = false;
   $('#show-accounts').hidden = true; $('#login').elements.password.value = ''; status(message);
 }
 async function changeArea(area) {
   if (!safeToClose()) return;
-  clearEditor(); contentEditor.clear(); accountEditor.clear();
+  clearEditor(); contentEditor.clear(); accountEditor.clear(); profileEditor.clear();
   $('#market-workspace').hidden = area !== 'markets'; $('#content-workspace').hidden = area !== 'content'; $('#account-workspace').hidden = area !== 'accounts';
-  for (const name of ['markets','content','accounts']) $('#show-' + name).setAttribute('aria-pressed', String(area === name));
+  $('#profile-workspace').hidden = area !== 'profile';
+  for (const name of ['markets','content','accounts','profile']) $('#show-' + name).setAttribute('aria-pressed', String(area === name));
   if (area === 'content') await contentEditor.load();
   else if (area === 'accounts') await accountEditor.load();
+  else if (area === 'profile') profileEditor.load();
   else status('Select a location or add a new one.');
 }
 $('#show-markets').onclick = () => changeArea('markets');
 $('#show-content').onclick = () => changeArea('content');
 $('#show-accounts').onclick = () => changeArea('accounts');
+$('#show-profile').onclick = () => changeArea('profile');
 async function checkSession() {
   if (!token || document.hidden) return;
   const checkedToken = token;

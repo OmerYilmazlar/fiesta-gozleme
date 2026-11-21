@@ -31,3 +31,11 @@ No passwords or bearer tokens are logged or stored by this function. Existing pa
 - Only after those checks, change the owner's own email/password if desired. Keep Supabase dashboard access available for recovery.
 
 Local mocked tests cover permission checks and request flow; live credential changes and database policy enforcement require the deployed function and migration. No account credentials have been changed by Codex during implementation.
+
+## Self-service passwords
+
+Approved editors can use **Account details** to change their own password with their current password, a new password (12–128 characters), and confirmation. This uses the same server-side reauthentication, rate limit and session cutoff as owner-managed changes. No verification email is required. The server derives the target from the verified identity and rejects client-supplied targets or email changes on this action.
+
+Apply `supabase/migrations/20261121224756_self_service_passwords.sql` before deploying the updated `manage-accounts` function. This migration has already been applied to the Fiesta production project. The new permission function is executable only by the server role.
+
+The owner can select a user under **User accounts**, click **Generate reset password**, enter the owner's current password, and save. A unique random password is generated for that reset; there is no shared default password. The password is displayed for private sharing and cleared when leaving the account screen. Ask the recipient to change it in Account details after signing in; expiry or mandatory first-login replacement is not enforced.

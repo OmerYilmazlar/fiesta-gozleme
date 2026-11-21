@@ -29,20 +29,28 @@ export function createHandler({ url, serverKey, fetchImpl = fetch }) {
       actor = identity.data;
       let claims; try { claims = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return reply(401, { error: 'Sign in again.' }); }
       if (!uuid.test(claims.session_id || '')) return reply(401, { error: 'Sign in again.' });
-      const permission = await rpc('fiesta_manager_access', { p_user: actor.id, p_session: claims.session_id });
-      if (!permission.ok) return reply(503, { error: 'Account setup is incomplete. Run 005-account-management.sql.' });
-      if (permission.data !== true) return reply(403, { error: 'Only the account owner can manage users. Sign in again if your account was changed.' });
       const raw = await request.text();
       if (raw.length > 4096) return reply(413, { error: 'Request too large.' });
       let input; try { input = JSON.parse(raw); } catch { return reply(400, { error: 'Invalid request.' }); }
+      const selfChange = input?.action === 'change_password';
+      const permission = await rpc(selfChange ? 'fiesta_editor_access' : 'fiesta_manager_access', { p_user: actor.id, p_session: claims.session_id });
+      if (!permission.ok) return reply(503, { error: 'Account setup is incomplete. Please contact the website owner.' });
+      if (permission.data !== true) return reply(403, { error: selfChange ? 'Your editor access or session is no longer valid. Sign in again.' : 'Only the account owner can manage users. Sign in again if your account was changed.' });
       if (input?.action === 'list') {
         const page = Number.isInteger(input.page) && input.page > 0 && input.page <= 1000 ? input.page : 1;
         const users = await call(`/auth/v1/admin/users?page=${page}&per_page=50`);
         if (!users.ok || !Array.isArray(users.data?.users)) throw Error('list');
         return reply(200, { users: users.data.users.map(u => ({ id: u.id, email: u.email || '' })), page, hasMore: users.data.users.length === 50, actorId: actor.id });
       }
-      if (input?.action !== 'update' || !uuid.test(input.userId || '')) return reply(400, { error: 'Select a valid user.' });
-      target = input.userId;
+      if (selfChange) {
+        if (input.userId !== undefined || input.email !== undefined) return reply(400, { error: 'Account details can change only your own password.' });
+        if (typeof input.password !== 'string' || input.password !== input.confirmPassword) return reply(400, { error: 'The new passwords do not match.' });
+        if (input.password === input.currentPassword) return reply(400, { error: 'Choose a different new password.' });
+        target = actor.id;
+      } else {
+        if (input?.action !== 'update' || !uuid.test(input.userId || '')) return reply(400, { error: 'Select a valid user.' });
+        target = input.userId;
+      }
       if (typeof input.currentPassword !== 'string' || !input.currentPassword || input.currentPassword.length > 1024) return reply(400, { error: 'Enter your current password to confirm this change.' });
       const updates = {};
       if (input.email !== undefined) {

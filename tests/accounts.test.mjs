@@ -2,22 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHandler } from '../supabase/functions/manage-accounts/index.js';
 import { createChangeTracker } from '../form-changes.js';
-import { createAccountEditor } from '../admin-accounts.js';
+import { createAccountEditor, generateResetPassword } from '../admin-accounts.js';
+import { createProfileEditor } from '../admin-profile.js';
 import { parseHTML } from 'linkedom';
 import { readFile } from 'node:fs/promises';
 const owner = 'b9168623-38f2-49a4-b835-6fe51ea0d098', other = '11111111-1111-4111-8111-111111111111', session = '22222222-2222-4222-8222-222222222222';
 const jwt = `header.${Buffer.from(JSON.stringify({ session_id: session })).toString('base64url')}.signature`;
-function setup({ manager = true, valid = true, reauth = true, limited = false, rejectUpdate = false } = {}) {
+function setup({ manager = true, editor = true, actorId = owner, valid = true, reauth = true, limited = false, rejectUpdate = false } = {}) {
   const calls = [];
   const handler = createHandler({ url: 'https://fixture.supabase.co', serverKey: 'SERVER_ONLY_TEST_KEY', fetchImpl: async (url, options) => {
     const path = new URL(url).pathname, body = options.body ? JSON.parse(options.body) : null;
     calls.push({ path, method: options.method, body });
     let data = null, status = 200;
-    if (path === '/auth/v1/user') { data = { id: owner, email: 'owner@example.com' }; if (!valid) status = 401; }
+    if (path === '/auth/v1/user') { data = { id: actorId, email: 'actor@example.com' }; if (!valid) status = 401; }
     else if (path.endsWith('fiesta_manager_access')) data = manager;
+    else if (path.endsWith('fiesta_editor_access')) data = editor;
     else if (path.endsWith('fiesta_account_attempt')) data = !limited;
     else if (path.endsWith('fiesta_invalidate_sessions')) data = null;
-    else if (path === '/auth/v1/token') { data = { access_token: 'temporary-token', user: { id: reauth ? owner : other } }; if (!reauth) status = 400; }
+    else if (path === '/auth/v1/token') { data = { access_token: 'temporary-token', user: { id: reauth ? actorId : 'wrong-user' } }; if (!reauth) status = 400; }
     else if (path === '/auth/v1/logout') data = null;
     else if (path === '/auth/v1/admin/users') data = { users: [{ id: owner, email: 'owner@example.com', secret_metadata: 'must-not-leak' }] };
     else if (path.startsWith('/auth/v1/admin/users/')) { data = { id: path.split('/').pop() }; if (options.method === 'PUT' && rejectUpdate) status = 422; }
@@ -130,4 +132,79 @@ test('rejected changes report that the owner must sign in again without leaking 
   const r = await request({ action: 'update', userId: owner, email: 'taken@example.com', currentPassword: 'private' });
   const body = await r.json(); assert.equal(r.status, 400); assert.equal(body.signInAgain, true);
   assert.ok(!JSON.stringify(body).includes('private'));
+});
+
+const selfPassword = { action: 'change_password', currentPassword: 'previous-private-password', password: 'new-private-password', confirmPassword: 'new-private-password' };
+test('an approved non-owner can change only their own password and invalidate old sessions', async () => {
+  const { calls, request } = setup({ manager: false, actorId: other });
+  const response = await request(selfPassword), body = await response.json();
+  assert.equal(response.status, 200); assert.equal(body.signInAgain, true);
+  const change = calls.find(c => c.method === 'PUT');
+  assert.equal(change.path, `/auth/v1/admin/users/${other}`);
+  assert.deepEqual(change.body, { password: selfPassword.password });
+  assert.ok(calls.filter(c => c.path.endsWith('fiesta_invalidate_sessions')).every(c => c.body.p_target === other));
+  assert.equal(calls.filter(c => c.path.endsWith('fiesta_invalidate_sessions')).length, 2);
+  assert.ok(!JSON.stringify(body).includes(selfPassword.password));
+  assert.ok(!calls.some(c => c.path.includes('/recover') || c.path.includes('/otp')));
+});
+
+test('self-service rejects target/email injection, mismatch, short passwords, stale access and wrong old passwords', async () => {
+  for (const input of [{ userId: owner }, { email: 'different@example.com' }, { confirmPassword: 'mismatch' }, { password: 'short', confirmPassword: 'short' }, { password: selfPassword.currentPassword, confirmPassword: selfPassword.currentPassword }]) {
+    const { calls, request } = setup({ manager: false, actorId: other });
+    assert.equal((await request({ ...selfPassword, ...input })).status, 400);
+    assert.ok(!calls.some(c => c.method === 'PUT'));
+  }
+  for (const options of [{ editor: false }, { reauth: false }, { limited: true }]) {
+    const { calls, request } = setup({ manager: false, actorId: other, ...options });
+    assert.ok([403, 429].includes((await request(selfPassword)).status));
+    assert.ok(!calls.some(c => c.method === 'PUT' || c.path.endsWith('fiesta_invalidate_sessions')));
+  }
+  const { request } = setup({ manager: false, actorId: other });
+  assert.equal((await request({ action: 'update', userId: owner, password: 'new-long-password', currentPassword: 'old-password' })).status, 403);
+});
+
+function mockForm(document, selector) {
+  const form = document.querySelector(selector);
+  Object.defineProperty(form, 'elements', { value: Object.fromEntries([...form.querySelectorAll('input[name]')].map(input => [input.name, input])) });
+  form.reset = () => { for (const input of form.querySelectorAll('input')) input.value = ''; };
+  return form;
+}
+
+test('Account details validates, ignores current-password autofill, submits and clears on sign-out', async () => {
+  const { document } = parseHTML(await readFile('admin.html', 'utf8')), prior = globalThis.document;
+  globalThis.document = document;
+  try {
+    document.querySelector('#workspace').hidden = false; document.querySelector('#profile-workspace').hidden = false;
+    const form = mockForm(document, '#profile-form'); let message = '', sent, signedOut = false;
+    const editor = createProfileEditor({ status: value => { message = value; }, signOut: () => { signedOut = true; }, api: async (path, options) => { sent = JSON.parse(options.body); return { signInAgain: true }; } });
+    editor.load(); form.elements.currentPassword.value = selfPassword.currentPassword;
+    assert.equal(editor.hasChanges(), false);
+    form.elements.password.value = selfPassword.password; form.elements.confirmPassword.value = 'mismatch';
+    await form.onsubmit({ preventDefault() {} }); assert.match(message, /do not match/); assert.equal(sent, undefined);
+    form.elements.confirmPassword.value = selfPassword.password; assert.equal(editor.hasChanges(), true);
+    await form.onsubmit({ preventDefault() {} }); assert.deepEqual(sent, selfPassword);
+    assert.equal(signedOut, true); assert.equal(editor.hasChanges(), false); assert.equal(form.elements.password.value, ''); assert.equal(editor.isBusy(), false);
+  } finally { globalThis.document = prior; }
+});
+
+test('owner reset generates a unique password, requires explicit save and clears it when leaving', async () => {
+  const first = generateResetPassword(), second = generateResetPassword();
+  assert.notEqual(first, second); assert.equal(first.length, 28); assert.match(first, /[a-z]/); assert.match(first, /[A-Z]/); assert.match(first, /\d/);
+  const { document } = parseHTML(await readFile('admin.html', 'utf8')), prior = globalThis.document; globalThis.document = document;
+  try {
+    document.querySelector('#workspace').hidden = false; document.querySelector('#account-workspace').hidden = false;
+    const form = mockForm(document, '#account-form'); let update;
+    const editor = createAccountEditor({ status() {}, signOut() {}, api: async (path, options) => {
+      const body = JSON.parse(options.body);
+      if (body.action === 'list') return { actorId: owner, users: [{ id: other, email: 'editor@example.com' }], page: 1, hasMore: false };
+      update = body; return { updated: true, signInAgain: false };
+    } });
+    await editor.load(); document.querySelector('#account-users button').click(); document.querySelector('#account-generate-password').click();
+    const generated = form.elements.password.value;
+    assert.equal(update, undefined); assert.equal(form.elements.confirmPassword.value, generated); assert.equal(editor.hasChanges(), true);
+    form.elements.currentPassword.value = 'owner-current-password'; await form.onsubmit({ preventDefault() {} });
+    assert.equal(update.userId, other); assert.equal(update.password, generated); assert.equal(update.currentPassword, 'owner-current-password');
+    assert.equal(document.querySelector('#account-reset-password').value, generated); assert.equal(document.querySelector('#account-reset-result').hidden, false);
+    editor.clear(); assert.equal(document.querySelector('#account-reset-password').value, ''); assert.equal(document.querySelector('#account-reset-result').hidden, true);
+  } finally { globalThis.document = prior; }
 });
