@@ -1,6 +1,9 @@
 import { supabaseUrl, supabaseKey } from './supabase-config.js';
-import { sections, applyContent } from './section-content.js';
+import { sections, applyContent, syncCollections } from './section-content.js';
+import { initHighlights } from './highlights-scroll.js';
 import { applyOrder } from './site-layout.js';
+syncCollections(document);
+initHighlights(document.querySelector('.values'));
 async function refresh() {
   try {
     const r = await fetch(`${supabaseUrl}/rest/v1/site_sections?select=id,content`, { headers: { apikey: supabaseKey }, signal: AbortSignal.timeout(10000), cache: 'no-store' });

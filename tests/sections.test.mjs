@@ -9,8 +9,43 @@ import { createSectionEditor } from '../admin-sections.js';
 import { createLayoutEditor } from '../admin-layout.js';
 import { defaultOrder, validateOrder, applyOrder } from '../site-layout.js';
 import { cleanupImages, sweepImages, imagePrefix } from '../image-storage.js';
+import { initHighlights } from '../highlights-scroll.js';
 const html = await readFile('index.html', 'utf8');
 const defaults = JSON.parse(await readFile('data/site-content.json', 'utf8'));
+
+test('gallery sizes follow visible images, including gaps, and five highlights stay available', () => {
+  const { document } = parseHTML(html), gallery = sections.find(s => s.id === 'gallery'), highlights = sections.find(s => s.id === 'highlights');
+  for (const count of [6, 5, 4, 3, 2, 1, 0]) {
+    const content = Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`photo${i + 1}_image`, i < count ? 'assets/photo-49.jpg' : '']));
+    applyContent(document, gallery, content);
+    const visible = [...document.querySelectorAll('.photo-grid figure')].filter(f => !f.hidden);
+    assert.equal(visible.length, count);
+    assert.deepEqual(visible.map(f => Number(f.dataset.gallerySpan)), count === 5 ? [2, 2, 2, 3, 3] : Array(count).fill(count === 1 ? 6 : count === 2 || count === 4 ? 3 : 2));
+  }
+  applyContent(document, gallery, { photo2_image: 'assets/photo-49.jpg', photo6_image: 'assets/photo-49.jpg' });
+  assert.deepEqual([...document.querySelectorAll('.photo-grid figure')].filter(f => !f.hidden).map(f => f.dataset.gallerySpan), ['3', '3']);
+  applyContent(document, highlights, { value1: '', value2: 'Second', value3: '', value4: 'Fourth', value5: 'A fifth highlight with longer text' });
+  assert.equal(document.querySelectorAll('.values-track span:not([hidden])').length, 3);
+  assert.equal(document.querySelector('.values-track [data-first]').textContent, 'Second');
+});
+
+test('highlights move only on overflow, can pause and respect reduced motion', () => {
+  const { document, window } = parseHTML(html), root = document.querySelector('.values'), viewport = root.querySelector('.values-viewport');
+  let overflow = 0, next = 0; const frames = new Map(), motion = { matches: false, addEventListener() {} };
+  Object.defineProperty(viewport, 'clientWidth', { value: 320 }); Object.defineProperty(viewport, 'scrollWidth', { get: () => 320 + overflow }); viewport.scrollLeft = 0;
+  const win = { matchMedia: () => motion, addEventListener() {}, ResizeObserver: class { observe() {} }, MutationObserver: class { observe() {} }, requestAnimationFrame: callback => { frames.set(++next, callback); return next; }, cancelAnimationFrame: id => frames.delete(id) };
+  const controller = initHighlights(root, win), button = root.querySelector('button');
+  assert.equal(frames.size, 0); assert.equal(button.hidden, true);
+  overflow = 500; controller.update(); assert.equal(frames.size, 1); assert.equal(button.hidden, false);
+  const step = t => { const [id, callback] = frames.entries().next().value; frames.delete(id); callback(t); };
+  step(1); step(1700); step(1750); assert.ok(viewport.scrollLeft > 0);
+  button.click(); assert.equal(frames.size, 0); assert.equal(button.textContent, 'Play');
+  button.click(); assert.equal(frames.size, 1);
+  viewport.dispatchEvent(new window.Event('focus')); assert.equal(frames.size, 0);
+  viewport.dispatchEvent(new window.Event('blur')); assert.equal(frames.size, 1);
+  motion.matches = true; controller.update(); assert.equal(frames.size, 0); assert.equal(button.hidden, true);
+  motion.matches = false; overflow = 0; controller.update(); assert.equal(frames.size, 0); assert.equal(viewport.scrollLeft, 0);
+});
 
 test('layouts move existing sections without losing content or controls and reject fixed/duplicate entries', () => {
   const { document } = parseHTML(html), market = document.querySelector('#markets'), hero = document.querySelector('.hero');
@@ -82,9 +117,9 @@ test('gift card editor loads, previews, publishes, reopens and preserves unsaved
     previewDoc.querySelector('#giftcards').getBoundingClientRect = () => ({ top: 0 });
     const editor = createSectionEditor({ status: value => { message = value; }, api: async (path, options = {}) => {
       if (options.method === 'PATCH') {
-        assert.match(path, /id=eq.giftcards&updated_at=eq./); patches++;
+        assert.match(path, /id=eq.(giftcards|highlights|gallery)&updated_at=eq./); patches++;
         if (conflict) return [];
-        const row = { id: 'giftcards', content: JSON.parse(options.body).content, updated_at: '2026-11-18T01:00:00Z' };
+        const row = { id: /id=eq\.([^&]+)/.exec(path)[1], content: JSON.parse(options.body).content, updated_at: '2026-11-18T01:00:00Z' };
         rows = rows.map(r => r.id === row.id ? row : r); return [row];
       }
       if (path.includes('/list/')) return [];
@@ -140,6 +175,31 @@ test('gift card editor loads, previews, publishes, reopens and preserves unsaved
     assert.equal(previewDoc.querySelector('.giftcards-photo').hasAttribute('src'), false);
     assert.equal(imageWrap.querySelector('.image-preview').hidden, true);
     assert.equal(editor.hasChanges(), false);
+    picker.value = 'highlights'; picker.onchange();
+    assert.equal(form.querySelectorAll('.collection-item:not([hidden])').length, 4);
+    form.querySelector('.collection-add').click();
+    assert.equal(form.querySelectorAll('.collection-item:not([hidden])').length, 5);
+    assert.equal(form.querySelector('.collection-add').disabled, true);
+    form.querySelector('[data-content-field="value5"]').value = 'Fifth highlight';
+    await form.onsubmit({ preventDefault() {} }); assert.equal(editor.hasChanges(), false);
+    assert.equal(rows.find(r => r.id === 'highlights').content.value5, 'Fifth highlight');
+    assert.equal(form.querySelector('.collection-add').disabled, true);
+    picker.value = 'gallery'; picker.onchange();
+    assert.equal(form.querySelectorAll('.collection-item:not([hidden])').length, 5);
+    form.querySelector('.collection-add').click();
+    const sixth = form.querySelector('[data-group="gallery6"]'), uploadSixth = sixth.querySelector('[type=file]');
+    Object.defineProperty(uploadSixth, 'files', { value: [new Blob(['sixth-image'], { type: 'image/png' })] });
+    await uploadSixth.onchange(); await form.onsubmit({ preventDefault() {} });
+    assert.match(rows.find(r => r.id === 'gallery').content.photo6_image, /site-images\/gallery\//);
+    assert.equal(form.querySelectorAll('.collection-item:not([hidden])').length, 6);
+    for (const n of [1, 3, 4, 5]) form.querySelector(`[data-group="gallery${n}"] .collection-remove`).click();
+    await form.onsubmit({ preventDefault() {} });
+    picker.value = 'hero'; picker.onchange(); picker.value = 'gallery'; picker.onchange();
+    assert.equal(form.querySelectorAll('.collection-item:not([hidden])').length, 2);
+    assert.equal(form.querySelector('[data-content-field="photo1_image"]').value, '');
+    assert.equal(editor.hasChanges(), false);
+    form.querySelector('[data-group="gallery6"] .collection-remove').click();
+    await form.onsubmit({ preventDefault() {} }); assert.equal(deleted.length, 2);
   } finally { Object.assign(globalThis, globals); }
 });
 test('trying, replacing and discarding images only manages browser memory', () => {

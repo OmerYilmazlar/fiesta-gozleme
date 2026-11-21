@@ -1,7 +1,7 @@
 import { createChangeTracker } from './form-changes.js';
 import { cleanupImages, sweepImages } from './image-storage.js';
 import { StagedImages, prepareImage } from './staged-images.js';
-import { sections, validateContent, applyContent } from './section-content.js';
+import { sections, validateContent, applyContent, syncCollections } from './section-content.js';
 import { supabaseUrl } from './supabase-config.js';
 import { applyOrder } from './site-layout.js';
 import { createLayoutEditor } from './admin-layout.js';
@@ -9,6 +9,7 @@ import { createLayoutEditor } from './admin-layout.js';
 export function createSectionEditor({ api, status }) {
   const $ = s => document.querySelector(s), form = $('#section-form'), picker = $('#section-picker');
   let defaults, rows = [], current, busy = false, previewReady = false;
+  let updateCollectionControls = () => {};
   const staged = new StagedImages();
   const cleanupWarning = ' Image cleanup could not complete. Run 004-image-cleanup.sql in Supabase if you have not already; cleanup will retry next time you open Website sections.';
   let lastSweep = 0;
@@ -34,6 +35,7 @@ export function createSectionEditor({ api, status }) {
       const pending = staged.get(f.id);
       if (pending) for (const image of doc.querySelectorAll(f.selector)) image.src = pending.previewUrl;
     }
+    syncCollections(doc);
   }
   $('#section-preview').addEventListener('load', () => {
     previewReady = true; const doc = $('#section-preview').contentDocument;
@@ -52,6 +54,7 @@ export function createSectionEditor({ api, status }) {
     busy = value; picker.disabled = value;
     layout.setDisabled(value);
     for (const n of form.querySelectorAll('input,textarea,button')) n.disabled = value;
+    updateCollectionControls();
   }
   function render() {
     staged.clear();
@@ -60,6 +63,21 @@ export function createSectionEditor({ api, status }) {
     const content = { ...defaults[s.id], ...current.content };
     $('#section-fields').replaceChildren();
     $('#section-title').textContent = s.label;
+    const groupIds = [...new Set(s.fields.map(f => f.group).filter(Boolean))], groups = new Map(), opened = new Set();
+    let add;
+    const groupHasContent = id => s.fields.filter(f => f.group === id && (f.type === 'image' || s.id === 'highlights')).some(f => staged.get(f.id) || form.querySelector(`[data-content-field="${f.id}"]`)?.value.trim());
+    const updateGroups = () => {
+      for (const [id, node] of groups) node.hidden = !opened.has(id) && !groupHasContent(id);
+      if (add) add.disabled = busy || groupIds.every(id => !groups.get(id)?.hidden);
+    };
+    updateCollectionControls = updateGroups;
+    if (groupIds.length) {
+      const controls = document.createElement('div'), hint = document.createElement('p');
+      hint.textContent = s.id === 'highlights' ? 'Add up to 5 highlights. Long highlights move sideways on the website when needed.' : 'Add up to 6 images. The gallery layout adapts automatically. Removing an image takes effect when you publish.';
+      add = document.createElement('button'); add.type = 'button'; add.className = 'secondary collection-add'; add.textContent = s.id === 'highlights' ? 'Add highlight' : 'Add image';
+      add.onclick = () => { const id = groupIds.find(id => groups.get(id).hidden); if (!id) return; opened.add(id); updateGroups(); groups.get(id).querySelector(s.id === 'gallery' ? 'input[type="file"]' : 'input')?.focus(); };
+      controls.append(hint, add); $('#section-fields').append(controls);
+    }
     for (const f of s.fields) {
       const wrap = document.createElement('div'); wrap.className = 'content-field';
       const label = document.createElement('label'); label.textContent = f.label;
@@ -74,7 +92,7 @@ export function createSectionEditor({ api, status }) {
         const img = document.createElement('img'); img.className = 'image-preview'; if (input.value) img.src = input.value; img.hidden = !input.value; img.alt = f.label;
         const chooseLabel = document.createElement('label'); chooseLabel.textContent = 'Choose replacement (JPG, PNG or WebP, up to 5 MB)';
         const choose = document.createElement('input'); choose.type = 'file'; choose.accept = 'image/jpeg,image/png,image/webp'; chooseLabel.append(choose);
-        const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'secondary'; reset.textContent = f.optional ? 'Use original card design' : 'Use original image';
+        const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'secondary'; reset.textContent = f.resetLabel || (f.optional ? 'Use original card design' : 'Use original image');
         reset.onclick = () => { staged.remove(f.id); input.value = defaults[s.id][f.id]; if (input.value) img.src = input.value; else img.removeAttribute('src'); img.hidden = !input.value; preview(); };
         choose.onchange = async () => {
           const file = choose.files[0]; if (!file) return;
@@ -84,10 +102,27 @@ export function createSectionEditor({ api, status }) {
         };
         wrap.append(img, chooseLabel, reset);
       }
-      $('#section-fields').append(wrap);
+      if (f.group) {
+        if (!groups.has(f.group)) {
+          const group = document.createElement('fieldset'), legend = document.createElement('legend'), remove = document.createElement('button');
+          group.className = 'collection-item'; group.dataset.group = f.group;
+          legend.textContent = s.id === 'gallery' ? `Gallery image ${groupIds.indexOf(f.group) + 1}` : f.label;
+          remove.type = 'button'; remove.className = 'secondary collection-remove'; remove.textContent = s.id === 'gallery' ? 'Remove image' : 'Remove highlight';
+          remove.onclick = () => {
+            for (const item of s.fields.filter(item => item.group === f.group)) {
+              staged.remove(item.id); form.querySelector(`[data-content-field="${item.id}"]`).value = '';
+            }
+            for (const image of group.querySelectorAll('.image-preview')) { image.removeAttribute('src'); image.hidden = true; }
+            opened.delete(f.group); updateGroups(); preview(); add.focus();
+          };
+          group.append(legend, remove); groups.set(f.group, group); $('#section-fields').append(group);
+        }
+        groups.get(f.group).append(wrap);
+      } else $('#section-fields').append(wrap);
     }
     form.hidden = false; changes.markSaved();
     setBusy(busy);
+    updateGroups();
     previewReady = false; $('#section-preview').src = './index.html';
   }
   picker.onchange = () => {

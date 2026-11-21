@@ -13,7 +13,7 @@ export const sections = [
     ...link('primary', 'Main button', '.hero .button'), ...link('secondary', 'Second button', '.hero .underlink'), ...photo('hero', 'Main image', '.hero-photo img'),
     field('caption', 'Image caption', '.hero-photo figcaption'), field('stamp', 'Round image badge', '.food-stamp', 'heading')] },
   { id: 'highlights', label: 'Highlights & market shortcut', target: '.values', fields: [
-    ...[1, 2, 3, 4].map(n => field(`value${n}`, `Highlight ${n}`, `.values > span:nth-of-type(${n})`)), field('heading', 'Shortcut heading', '.quick-find b'), field('detail', 'Shortcut description', '.quick-find div > span'), ...link('button', 'Shortcut button', '.quick-find > a')] },
+    ...[1, 2, 3, 4, 5].map(n => ({ ...field(`value${n}`, `Highlight ${n}`, `.values-track > span:nth-of-type(${n})`), group: `highlight${n}` })), field('heading', 'Shortcut heading', '.quick-find b'), field('detail', 'Shortcut description', '.quick-find div > span'), ...link('button', 'Shortcut button', '.quick-find > a')] },
   { id: 'menu', label: 'Menu & prices', target: '#menu', fields: [
     ...intro('#menu'), ...[1, 2, 3].flatMap(n => { const s = `.menu-row:nth-child(${n})`; return [field(`item${n}_tag`, `Item ${n}: small heading`, `${s} .menu-number`), field(`item${n}_name`, `Item ${n}: name`, `${s} h3`, 'heading'), field(`item${n}_description`, `Item ${n}: description`, `${s} p`, 'multiline'), field(`item${n}_price`, `Item ${n}: price`, `${s} > strong`)]; }),
     field('combinations_label', 'Combinations button', '.signature summary'), ...[1, 2, 3, 4, 5].map(n => field(`combination${n}`, `Combination ${n}`, `.signature li:nth-child(${n})`)),
@@ -34,7 +34,7 @@ export const sections = [
     ...[1, 2, 3].map(n => field(`amount${n}`, `Card ${n}: amount`, `.gift-card:nth-child(${n}) strong`))] },
   { id: 'story', label: 'Our story', target: '#story', fields: [field('eyebrow', 'Small heading', '.story-content .eyebrow'), field('heading', 'Heading', '.story-content h2', 'heading'), ...[1, 2].map(n => field(`paragraph${n}`, `Paragraph ${n}`, `.story-content > p:not(.eyebrow):nth-of-type(${n + 1})`, 'multiline')), ...link('button', 'Story button', '.story-content > a'), ...photo('story', 'Story image', '.story-art img'), field('caption', 'Image caption', '.story-art figcaption')] },
   { id: 'instagram', label: 'Instagram section heading', target: '#instagram', fields: [field('eyebrow', 'Small heading', '#instagram .eyebrow'), field('heading', 'Heading', '#instagram-title', 'heading'), ...link('follow', 'Follow button', '.instagram-follow a')] },
-  { id: 'gallery', label: 'Photo gallery', target: '#gallery', fields: [...intro('#gallery'), ...[1, 2, 3, 4, 5].flatMap(n => [...photo(`photo${n}`, `Gallery image ${n}`, `.photo-grid figure:nth-child(${n}) img`), field(`caption${n}`, `Image ${n}: caption`, `.photo-grid figure:nth-child(${n}) figcaption`)]), ...link('button', 'Gallery button', '#gallery > a')] },
+  { id: 'gallery', label: 'Photo gallery', target: '#gallery', fields: [...intro('#gallery'), ...[1, 2, 3, 4, 5, 6].flatMap(n => [...photo(`photo${n}`, `Gallery image ${n}`, `.photo-grid figure:nth-child(${n}) img`), field(`caption${n}`, `Image ${n}: caption`, `.photo-grid figure:nth-child(${n}) figcaption`)].map(f => ({ ...f, group: `gallery${n}`, ...(f.type === 'image' ? { optional: true, resetLabel: n <= 5 ? 'Use original image' : 'Remove image' } : {}) }))), ...link('button', 'Gallery button', '#gallery > a')] },
   { id: 'contact', label: 'Contact', target: '#contact', fields: [field('eyebrow', 'Small heading', '#contact .eyebrow'), field('heading', 'Heading', '#contact h2', 'heading'), field('intro', 'Introduction', '#contact > p:not(.eyebrow)', 'multiline'), ...link('email_button', 'Email button', '#contact .actions > a:first-child'), ...link('phone_button', 'Phone button', '#contact .actions > a:last-child'), ...link('email', 'Displayed email', '#contact > .email')] },
   { id: 'footer', label: 'Footer & social links', target: 'footer', fields: [field('tagline', 'Footer tagline', 'footer > p'), ...photo('logo', 'Footer logo', 'footer .brand-logo'), field('instagram', 'Instagram profile URL', '.footer-socials a:first-child, .announcement-socials a:first-child', 'link'), field('facebook', 'Facebook profile URL', '.footer-socials a:last-child, .announcement-socials a:last-child', 'link'), ...link('mobile_menu', 'Mobile menu button', '.mobile-nav a:first-child'), ...link('mobile_markets', 'Mobile markets button', '.mobile-nav a:last-child')] }
 ];
@@ -83,4 +83,17 @@ export function applyContent(document, section, content) {
       });
     }
   }
+  syncCollections(document);
+}
+
+// Fixed slots retain compatibility with saved content and allow safe removal.
+export function syncCollections(document) {
+  const highlights = [...document.querySelectorAll('.values-track > span')];
+  let first = true;
+  for (const item of highlights) { item.hidden = !item.textContent.trim(); item.toggleAttribute('data-first', first && !item.hidden); if (!item.hidden) first = false; }
+  const bar = document.querySelector('.values'); if (bar) bar.hidden = first;
+  const figures = [...document.querySelectorAll('.photo-grid > figure')];
+  for (const figure of figures) figure.hidden = !figure.querySelector('img')?.getAttribute('src');
+  const visible = figures.filter(f => !f.hidden), count = visible.length;
+  visible.forEach((figure, index) => { figure.dataset.gallerySpan = String(count === 1 ? 6 : count === 2 || count === 4 || count === 5 && index >= 3 ? 3 : 2); });
 }
