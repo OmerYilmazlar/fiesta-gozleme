@@ -8,7 +8,7 @@ import { parseHTML } from 'linkedom';
 import { readFile } from 'node:fs/promises';
 const owner = 'b9168623-38f2-49a4-b835-6fe51ea0d098', other = '11111111-1111-4111-8111-111111111111', session = '22222222-2222-4222-8222-222222222222';
 const jwt = `header.${Buffer.from(JSON.stringify({ session_id: session })).toString('base64url')}.signature`;
-function setup({ manager = true, editor = true, actorId = owner, valid = true, reauth = true, limited = false, rejectUpdate = false } = {}) {
+function setup({ manager = true, editor = true, actorId = owner, valid = true, reauth = true, limited = false, rejectUpdate = false, member = true, membershipFailure = false } = {}) {
   const calls = [];
   const handler = createHandler({ url: 'https://fixture.supabase.co', serverKey: 'SERVER_ONLY_TEST_KEY', fetchImpl: async (url, options) => {
     const path = new URL(url).pathname, body = options.body ? JSON.parse(options.body) : null;
@@ -21,8 +21,13 @@ function setup({ manager = true, editor = true, actorId = owner, valid = true, r
     else if (path.endsWith('fiesta_invalidate_sessions')) data = null;
     else if (path === '/auth/v1/token') { data = { access_token: 'temporary-token', user: { id: reauth ? actorId : 'wrong-user' } }; if (!reauth) status = 400; }
     else if (path === '/auth/v1/logout') data = null;
-    else if (path === '/auth/v1/admin/users') data = { users: [{ id: owner, email: 'owner@example.com', secret_metadata: 'must-not-leak' }] };
-    else if (path.startsWith('/auth/v1/admin/users/')) { data = { id: path.split('/').pop() }; if (options.method === 'PUT' && rejectUpdate) status = 422; }
+    else if (path === '/rest/v1/market_editors') {
+      const target = new URL(url).searchParams.get('user_id')?.slice(3);
+      data = target ? (member ? [{ user_id: target }] : []) : [{ user_id: owner }];
+      if (membershipFailure) status = 500;
+    }
+    else if (path === '/auth/v1/admin/users') throw Error('Shared Auth directory must never be listed');
+    else if (path.startsWith('/auth/v1/admin/users/')) { data = { id: path.split('/').pop(), email: 'owner@example.com', secret_metadata: 'must-not-leak' }; if (options.method === 'PUT' && rejectUpdate) status = 422; }
     else throw Error(`Unexpected path ${path}`);
     return new Response(JSON.stringify(data), { status });
   } });
@@ -207,4 +212,23 @@ test('owner reset generates a unique password, requires explicit save and clears
     assert.equal(document.querySelector('#account-reset-password').value, generated); assert.equal(document.querySelector('#account-reset-result').hidden, false);
     editor.clear(); assert.equal(document.querySelector('#account-reset-password').value, ''); assert.equal(document.querySelector('#account-reset-result').hidden, true);
   } finally { globalThis.document = prior; }
+});
+
+
+test('other-site target IDs and unavailable membership checks cannot change or revoke accounts', async () => {
+  for (const options of [{ member: false }, { membershipFailure: true }]) {
+    const { request, calls } = setup(options);
+    const response = await request({ action: 'update', userId: other, password: 'new-strong-password', currentPassword: 'current-private' });
+    assert.equal(response.status, options.member === false ? 403 : 503);
+    assert.ok(!calls.some(c => c.path.includes('/auth/v1/admin/users') || c.path.endsWith('fiesta_invalidate_sessions')));
+  }
+});
+
+test('listing reads only Fiesta member profiles and fails closed if membership is unavailable', async () => {
+  const { request, calls } = setup();
+  assert.equal((await request({ action: 'list' })).status, 200);
+  assert.deepEqual(calls.filter(c => c.path.includes('/auth/v1/admin/users')).map(c => c.path), [`/auth/v1/admin/users/${owner}`]);
+  const failed = setup({ membershipFailure: true });
+  assert.equal((await failed.request({ action: 'list' })).status, 503);
+  assert.ok(!failed.calls.some(c => c.path.includes('/auth/v1/admin/users')));
 });

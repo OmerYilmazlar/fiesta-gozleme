@@ -38,9 +38,15 @@ export function createHandler({ url, serverKey, fetchImpl = fetch }) {
       if (permission.data !== true) return reply(403, { error: selfChange ? 'Your editor access or session is no longer valid. Sign in again.' : 'Only the account owner can manage users. Sign in again if your account was changed.' });
       if (input?.action === 'list') {
         const page = Number.isInteger(input.page) && input.page > 0 && input.page <= 1000 ? input.page : 1;
-        const users = await call(`/auth/v1/admin/users?page=${page}&per_page=50`);
-        if (!users.ok || !Array.isArray(users.data?.users)) throw Error('list');
-        return reply(200, { users: users.data.users.map(u => ({ id: u.id, email: u.email || '' })), page, hasMore: users.data.users.length === 50, actorId: actor.id });
+        // Page through this website's membership, never the project's shared Auth directory.
+        const members = await call(`/rest/v1/market_editors?select=user_id&order=user_id.asc&offset=${(page - 1) * 50}&limit=51`);
+        if (!members.ok || !Array.isArray(members.data) || members.data.some(m => !uuid.test(m.user_id || ''))) throw Error('members');
+        const users = await Promise.all(members.data.slice(0, 50).map(async member => {
+          const user = await call(`/auth/v1/admin/users/${member.user_id}`);
+          if (!user.ok || user.data?.id !== member.user_id) throw Error('user');
+          return { id: user.data.id, email: user.data.email || '' };
+        }));
+        return reply(200, { users, page, hasMore: members.data.length > 50, actorId: actor.id });
       }
       if (selfChange) {
         if (input.userId !== undefined || input.email !== undefined) return reply(400, { error: 'Account details can change only your own password.' });
@@ -69,6 +75,10 @@ export function createHandler({ url, serverKey, fetchImpl = fetch }) {
       if (!check.ok || check.data?.user?.id !== actor.id) return reply(403, { error: 'Your current password was not accepted.' });
       // Dispose of the temporary reauthentication session; never return its tokens.
       try { await call('/auth/v1/logout?scope=local', { method: 'POST', bearer: check.data.access_token }); } catch { /* Credential change also cuts off the owner's old sessions when editing self. */ }
+      // Reject guessed IDs from other websites before reading or changing Auth data.
+      const membership = await call(`/rest/v1/market_editors?select=user_id&user_id=eq.${target}&limit=1`);
+      if (!membership.ok || !Array.isArray(membership.data)) throw Error('membership');
+      if (!membership.data.some(member => member.user_id === target)) return reply(403, { error: 'This account is not a Fiesta editor.' });
       const existing = await call(`/auth/v1/admin/users/${target}`);
       if (!existing.ok) return reply(404, { error: 'User not found.' });
       const revoke = await rpc('fiesta_invalidate_sessions', { p_target: target });
