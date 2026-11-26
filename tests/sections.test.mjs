@@ -29,21 +29,27 @@ test('gallery sizes follow visible images, including gaps, and five highlights s
   assert.equal(document.querySelector('.values-track [data-first]').textContent, 'Second');
 });
 
-test('highlights move only on overflow, can pause and respect reduced motion', () => {
+test('highlights move only on overflow, resume after manual scrolling and respect reduced motion', () => {
   const { document, window } = parseHTML(html), root = document.querySelector('.values'), viewport = root.querySelector('.values-viewport');
   let overflow = 0, next = 0; const frames = new Map(), motion = { matches: false, addEventListener() {} };
   Object.defineProperty(viewport, 'clientWidth', { value: 320 }); Object.defineProperty(viewport, 'scrollWidth', { get: () => 320 + overflow }); viewport.scrollLeft = 0;
   const win = { matchMedia: () => motion, addEventListener() {}, ResizeObserver: class { observe() {} }, MutationObserver: class { observe() {} }, requestAnimationFrame: callback => { frames.set(++next, callback); return next; }, cancelAnimationFrame: id => frames.delete(id) };
-  const controller = initHighlights(root, win), button = root.querySelector('button');
-  assert.equal(frames.size, 0); assert.equal(button.hidden, true);
-  overflow = 500; controller.update(); assert.equal(frames.size, 1); assert.equal(button.hidden, false);
+  let resume;
+  win.setTimeout = callback => { resume = callback; return 1; };
+  win.clearTimeout = () => {};
+  const controller = initHighlights(root, win);
+  assert.equal(root.querySelector('button'), null);
+  assert.equal(frames.size, 0);
+  overflow = 500; controller.update();
   const step = t => { const [id, callback] = frames.entries().next().value; frames.delete(id); callback(t); };
-  step(1); step(1700); step(1750); assert.ok(viewport.scrollLeft > 0);
-  button.click(); assert.equal(frames.size, 0); assert.equal(button.textContent, 'Play');
-  button.click(); assert.equal(frames.size, 1);
-  viewport.dispatchEvent(new window.Event('focus')); assert.equal(frames.size, 0);
-  viewport.dispatchEvent(new window.Event('blur')); assert.equal(frames.size, 1);
-  motion.matches = true; controller.update(); assert.equal(frames.size, 0); assert.equal(button.hidden, true);
+  step(0); step(16); assert.ok(viewport.scrollLeft > 0);
+  viewport.dispatchEvent(new window.Event('touchstart')); assert.equal(frames.size, 0);
+  viewport.scrollLeft = overflow;
+  viewport.dispatchEvent(Object.assign(new window.Event('touchend'), { touches: [] }));
+  viewport.dispatchEvent(new window.Event('scroll')); assert.equal(frames.size, 0);
+  resume(); step(1000); step(1016);
+  assert.ok(viewport.scrollLeft < overflow);
+  motion.matches = true; controller.update(); assert.equal(frames.size, 0);
   motion.matches = false; overflow = 0; controller.update(); assert.equal(frames.size, 0); assert.equal(viewport.scrollLeft, 0);
 });
 
